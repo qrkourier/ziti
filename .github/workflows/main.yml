@@ -28,6 +28,7 @@ env:
 jobs:
   mac-os-build:
     name: Build Mac OS binaries
+    if: github.repository_owner == 'openziti'  # TODO: finish debugging workflow
     runs-on: macos-11
     steps:
       - name: Git Checkout
@@ -58,6 +59,7 @@ jobs:
 
   windows-build:
     name: Build Windows binaries
+    if: github.repository_owner == 'openziti'  # TODO: finish debugging workflow
     runs-on: windows-2019
     steps:
       - name: Git Checkout
@@ -89,28 +91,25 @@ jobs:
 
   fablab-smoketest:
     name: Fablab Smoketest
+    if: github.repository_owner == 'openziti'
     runs-on: ubuntu-20.04
     steps:
       - name: Git Checkout
         # make every step in fablab-smoketest conditional (implies && sucess())
         # because there's not a job-level conditional that can read from env
-        if: env.AWS_ACCESS_KEY_ID != null
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
       - name: Install Go
-        if: env.AWS_ACCESS_KEY_ID != null
         uses: actions/setup-go@v3
         with:
           go-version: '1.19.x'
 
       - name: Install Ziti CI
-        if: env.AWS_ACCESS_KEY_ID != null
         uses: netfoundry/ziti-ci@v1
 
       - name: Build and Test
-        if: env.AWS_ACCESS_KEY_ID != null
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ziti_ci_gpg_key: ${{ secrets.ZITI_CI_GPG_KEY }}
@@ -124,7 +123,6 @@ jobs:
           go build -tags=all,tests -o dist/bin/ ./...
 
       - name: Create Zitilab Bindings
-        if: env.AWS_ACCESS_KEY_ID != null
         run: |
           mkdir ~/.fablab
           touch ~/.fablab/bindings.yml
@@ -141,7 +139,6 @@ jobs:
           cat ~/.fablab/bindings.yml
 
       - name: Test Ziti Command
-        if: env.AWS_ACCESS_KEY_ID != null
         env:
           ZITI_ROOT: dist/bin/
         run: |
@@ -150,7 +147,7 @@ jobs:
           $(go env GOPATH)/bin/simple-transfer run
 
       - name: Test Ziti Command Teardown
-        if: env.AWS_ACCESS_KEY_ID != null && always()
+        if: always()
         env:
           ZITI_ROOT: dist/bin/
         run: |
@@ -217,8 +214,8 @@ jobs:
           version: 1.51.1
 
       # remaining steps in job only run on the upstream repo, not forks
-      - name: Publish
-        if: github.repository_owner == 'openziti' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v'))
+      - name: Publish GitHub Release
+        if: env.ziti_ci_gpg_key_id != null && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v'))
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ziti_ci_gpg_key: ${{ secrets.ZITI_CI_GPG_KEY }}
@@ -254,7 +251,7 @@ jobs:
           fi
 
       - name: Publish to Artifactory
-        if: ${{ env.JFROG_API_KEY != null && github.repository == 'openziti/ziti' }}
+        if: ${{ env.JFROG_API_KEY != null && github.repository_owner == 'openziti' }}
         run: |
           $(go env GOPATH)/bin/ziti-ci publish-to-artifactory
         env:
@@ -324,7 +321,8 @@ jobs:
 
   call-publish-containers:
     # TODO: finish debugging start conditional
-    if: github.repository_owner == 'openziti' && (github.ref == 'refs/heads/main')
+    if: github.repository_owner == 'qrkourier' && (github.ref == 'refs/heads/main')
+    # if: github.repository_owner == 'openziti' && (github.ref == 'refs/heads/main')
     name: Publish Container Images
     needs: publish
     uses: ./.github/workflows/publish-containers.yml
