@@ -89,9 +89,8 @@ jobs:
 
   fablab-smoketest:
     name: Fablab Smoketest
+    if: ${{ env.AWS_ACCESS_KEY_ID != null }}
     runs-on: ubuntu-20.04
-    outputs:
-      ZITI_VERSION: ${{ steps.get_version.outputs.ZITI_VERSION }}
     steps:
       - name: Git Checkout
         uses: actions/checkout@v3
