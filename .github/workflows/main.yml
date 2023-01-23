@@ -197,18 +197,21 @@ jobs:
           CC=aarch64-linux-gnu-gcc   $(go env GOPATH)/bin/gox -cgo -os=linux -arch=arm64 -output=$GOX_OUTPUT ./...
 
       - name: Download darwin release artifact
+        if: github.repository_owner == 'openziti'  # TODO: stop skipping macOS, Windows
         uses: actions/download-artifact@v3
         with:
           name: darwin-release-${{ github.run_id }}
           path: release/
 
       - name: Download windows release artifact
+        if: github.repository_owner == 'openziti'  # TODO: stop skipping macOS, Windows
         uses: actions/download-artifact@v3
         with:
           name: windows-release-${{ github.run_id }}
           path: release/
 
       - name: Install Jfrog CLI
+        if: env.JFROG_API_KEY != null && github.repository_owner == 'openziti'
         uses: jfrog/setup-jfrog-cli@v2
         with:
           version: 1.51.1
