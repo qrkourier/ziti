@@ -315,3 +315,13 @@ jobs:
     secrets: inherit
     with:
       ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
+
+  call-publish-containers:
+    # TODO: finish debugging start conditional
+    if: github.repository_owner == 'openziti' && (github.ref == 'refs/heads/main')
+    name: Publish Container Images
+    needs: publish
+    uses: ./.github/workflows/publish-containers.yml
+    secrets: inherit
+    with:
+      ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
