@@ -196,6 +196,13 @@ jobs:
           CC=arm-linux-gnueabihf-gcc $(go env GOPATH)/bin/gox -cgo -os=linux -arch=arm -output=$GOX_OUTPUT ./...
           CC=aarch64-linux-gnu-gcc   $(go env GOPATH)/bin/gox -cgo -os=linux -arch=arm64 -output=$GOX_OUTPUT ./...
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-release-${{ github.run_id }}
+          path: release/
+          retention-days: 5
+
       - name: Download darwin release artifact
         if: github.repository_owner == 'openziti'  # TODO: stop skipping macOS, Windows
         uses: actions/download-artifact@v3
