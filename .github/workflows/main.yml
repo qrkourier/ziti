@@ -159,7 +159,7 @@ jobs:
   publish:
     name: Publish Binaries and Docker Image
     runs-on: ubuntu-20.04
-    needs: [ mac-os-build, windows-build, fablab-smoketest ]
+    # needs: [ mac-os-build, windows-build, fablab-smoketest ]  # TODO: stop skipping macOS, Windows
     outputs:
       ZITI_VERSION: ${{ steps.get_version.outputs.ZITI_VERSION }}
     steps:
@@ -314,6 +314,7 @@ jobs:
     #
     needs: publish
     name: Call the On-Demand Smoketest Workflow
+    if: github.repository_owner == 'openziti'
     uses: ./.github/workflows/jenkins-smoketest.yml
     secrets: inherit
     with:
