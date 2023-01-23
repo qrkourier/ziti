@@ -89,23 +89,28 @@ jobs:
 
   fablab-smoketest:
     name: Fablab Smoketest
-    if: ${{ env.AWS_ACCESS_KEY_ID != null }}
     runs-on: ubuntu-20.04
     steps:
       - name: Git Checkout
+        # make every step in fablab-smoketest conditional (implies && sucess())
+        # because there's not a job-level conditional that can read from env
+        if: env.AWS_ACCESS_KEY_ID != null
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
       - name: Install Go
+        if: env.AWS_ACCESS_KEY_ID != null
         uses: actions/setup-go@v3
         with:
           go-version: '1.19.x'
 
       - name: Install Ziti CI
+        if: env.AWS_ACCESS_KEY_ID != null
         uses: netfoundry/ziti-ci@v1
 
       - name: Build and Test
+        if: env.AWS_ACCESS_KEY_ID != null
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ziti_ci_gpg_key: ${{ secrets.ZITI_CI_GPG_KEY }}
@@ -119,6 +124,7 @@ jobs:
           go build -tags=all,tests -o dist/bin/ ./...
 
       - name: Create Zitilab Bindings
+        if: env.AWS_ACCESS_KEY_ID != null
         run: |
           mkdir ~/.fablab
           touch ~/.fablab/bindings.yml
@@ -135,6 +141,7 @@ jobs:
           cat ~/.fablab/bindings.yml
 
       - name: Test Ziti Command
+        if: env.AWS_ACCESS_KEY_ID != null
         env:
           ZITI_ROOT: dist/bin/
         run: |
@@ -143,7 +150,7 @@ jobs:
           $(go env GOPATH)/bin/simple-transfer run
 
       - name: Test Ziti Command Teardown
-        if: always()
+        if: env.AWS_ACCESS_KEY_ID != null && always()
         env:
           ZITI_ROOT: dist/bin/
         run: |
