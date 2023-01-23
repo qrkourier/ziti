@@ -89,7 +89,7 @@ jobs:
 
   fablab-smoketest:
     name: Fablab Smoketest
-    if: ${{ env.AWS_ACCESS_KEY_ID != null }}
+    if: env.AWS_ACCESS_KEY_ID != null
     runs-on: ubuntu-20.04
     steps:
       - name: Git Checkout
