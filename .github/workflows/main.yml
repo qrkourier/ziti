@@ -284,7 +284,7 @@ jobs:
 
   # e.g. "release-next", "release-v1.0.0" will create a container image tag with the same name
   call-publish-prerelease-docker-images:
-    if: github.ref == startsWith(github.ref, 'refs/heads/release-')
+    if: startsWith(github.ref, 'refs/heads/release-')
     name: Publish Pre-Release Docker Images
     needs: publish
     uses: ./.github/workflows/publish-docker-images.yml
