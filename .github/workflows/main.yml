@@ -278,8 +278,8 @@ jobs:
       ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   call-publish-prerelease-docker-images:
-    if: github.ref == 'refs/heads/release-next'
-    name: Publish Docker Images
+    if: github.ref == startsWith(github.ref, 'refs/heads/release-')
+    name: Publish Pre-Release Docker Images
     needs: publish
     uses: ./.github/workflows/publish-docker-images.yml
     secrets: inherit
@@ -288,7 +288,7 @@ jobs:
 
   call-publish-release-docker-images:
     if: github.ref == 'refs/heads/main'
-    name: Publish Docker Images
+    name: Publish Release Docker Images
     needs: publish
     uses: ./.github/workflows/publish-docker-images.yml
     secrets: inherit
