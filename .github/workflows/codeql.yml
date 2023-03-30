@@ -19,6 +19,7 @@ on:
 
 jobs:
   analyze:
+    if: github.repository_owner == 'openziti'
     name: Analyze
     runs-on: ubuntu-latest
     permissions:

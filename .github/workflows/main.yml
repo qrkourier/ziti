@@ -28,6 +28,7 @@ env:
 
 jobs:
   mac-os-build:
+    if: github.repository_owner == 'openziti'
     name: Build Mac OS binaries
     runs-on: macos-11
     steps:
@@ -58,6 +59,7 @@ jobs:
           retention-days: 5
 
   windows-build:
+    if: github.repository_owner == 'openziti'
     name: Build Windows binaries
     runs-on: windows-2019
     steps:
@@ -156,10 +158,11 @@ jobs:
   publish:
     name: Publish Binaries
     runs-on: ubuntu-20.04
-    needs: [ mac-os-build, windows-build, fablab-smoketest ]
+    #needs: [ mac-os-build, windows-build, fablab-smoketest ]
     outputs:
       ZITI_VERSION: ${{ steps.get_version.outputs.ZITI_VERSION }}
     steps:
+      - run: echo ${{ github.ref }}  # DEBUG
       - name: Git Checkout
         uses: actions/checkout@v3
         with:
@@ -202,12 +205,14 @@ jobs:
           retention-days: 5
 
       - name: Download darwin release artifact
+        if: github.repository_owner == 'openziti'
         uses: actions/download-artifact@v3
         with:
           name: darwin-release-${{ github.run_id }}
           path: release/
 
       - name: Download windows release artifact
+        if: github.repository_owner == 'openziti'
         uses: actions/download-artifact@v3
         with:
           name: windows-release-${{ github.run_id }}
@@ -277,6 +282,7 @@ jobs:
     with:
       ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
+  # e.g. "release-next", "release-v1.0.0" will create a container image tag with the same name
   call-publish-prerelease-docker-images:
     if: github.ref == startsWith(github.ref, 'refs/heads/release-')
     name: Publish Pre-Release Docker Images
