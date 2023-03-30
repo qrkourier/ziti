@@ -282,15 +282,14 @@ jobs:
     with:
       ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
-  # e.g. "release-next", "release-v1.0.0" will create a container image tag with the same name
   call-publish-prerelease-docker-images:
-    if: startsWith(github.ref, 'refs/heads/release-')
+    if: github.ref == 'refs/heads/release-next'
     name: Publish Pre-Release Docker Images
     needs: publish
     uses: ./.github/workflows/publish-docker-images.yml
     secrets: inherit
     with:
-      ziti-version: ${{ github.ref }}
+      ziti-version: release-next
 
   call-publish-release-docker-images:
     if: github.ref == 'refs/heads/main'
