@@ -44,7 +44,7 @@ jobs:
         id: tagprep_cli
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION#refs/heads/}"
+          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION}"
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             DOCKER_TAGS+=",${RELEASE_REPO}:latest"
           fi
@@ -72,7 +72,7 @@ jobs:
         id: tagprep_ctrl
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION#refs/heads/}"
+          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION}"
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             DOCKER_TAGS+=",${RELEASE_REPO}:latest"
           fi
@@ -100,7 +100,7 @@ jobs:
         id: tagprep_router
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION#refs/heads/}"
+          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION}"
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             DOCKER_TAGS+=",${RELEASE_REPO}:latest"
           fi
@@ -127,7 +127,7 @@ jobs:
         run: |
           DOCKER_TAGS=""
           for REPO in ${SNAPSHOT_REPO} ${RELEASE_REPO}; do
-            DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION#refs/heads/}"
+            DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION}"
             if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
               DOCKER_TAGS+=",${RELEASE_REPO}:latest"
             fi
