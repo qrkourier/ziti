@@ -91,6 +91,7 @@ jobs:
           tags: ${{ steps.tagprep_ctrl.outputs.DOCKER_TAGS }}
           build-args: |
             ZITI_VERSION=${{ env.ZITI_VERSION }}
+            SOURCE_IMAGE="docker.io/openziti/ziti-cli"
           push: true
 
       - name: Set Up Container Image Tags for Router Container
@@ -115,6 +116,7 @@ jobs:
           tags: ${{ steps.tagprep_router.outputs.DOCKER_TAGS }}
           build-args: |
             ZITI_VERSION=${{ env.ZITI_VERSION }}
+            SOURCE_IMAGE="docker.io/openziti/ziti-cli"
           push: true
 
       - name: Set Up Container Image Tags for Go Tunneler Container
@@ -143,4 +145,5 @@ jobs:
           tags: ${{ steps.tagprep_tun.outputs.DOCKER_TAGS }}
           build-args: |
             ZITI_VERSION=${{ env.ZITI_VERSION }}
+            SOURCE_IMAGE="docker.io/openziti/ziti-cli"
           push: true
