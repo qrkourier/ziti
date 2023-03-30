@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       ziti-version:
-        description: 'Ziti Release Version'
+        description: 'Tag or Branch Ref to Publish'
         type: string
         required: true
 
@@ -44,7 +44,10 @@ jobs:
         id: tagprep_cli
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION},${RELEASE_REPO}:latest"
+          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION}
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            DOCKER_TAGS+=",${RELEASE_REPO}:latest"
+          fi
           echo "DEBUG: DOCKER_TAGS=${DOCKER_TAGS}"
           echo DOCKER_TAGS="${DOCKER_TAGS}" >> $GITHUB_OUTPUT
 
@@ -69,7 +72,10 @@ jobs:
         id: tagprep_ctrl
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION},${RELEASE_REPO}:latest"
+          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION}
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            DOCKER_TAGS+=",${RELEASE_REPO}:latest"
+          fi
           echo "DEBUG: DOCKER_TAGS=${DOCKER_TAGS}"
           echo DOCKER_TAGS="${DOCKER_TAGS}" >> $GITHUB_OUTPUT
 
@@ -93,7 +99,10 @@ jobs:
         id: tagprep_router
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION},${RELEASE_REPO}:latest"
+          DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION}
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            DOCKER_TAGS+=",${RELEASE_REPO}:latest"
+          fi
           echo "DEBUG: DOCKER_TAGS=${DOCKER_TAGS}"
           echo DOCKER_TAGS="${DOCKER_TAGS}" >> $GITHUB_OUTPUT
 
@@ -116,7 +125,10 @@ jobs:
         run: |
           DOCKER_TAGS=""
           for REPO in ${SNAPSHOT_REPO} ${RELEASE_REPO}; do
-            DOCKER_TAGS+=",${REPO}:${ZITI_VERSION},${REPO}:latest"
+            DOCKER_TAGS="${RELEASE_REPO}:${ZITI_VERSION}
+            if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+              DOCKER_TAGS+=",${RELEASE_REPO}:latest"
+            fi
           done
           DOCKER_TAGS=${DOCKER_TAGS#,} # drop leading comma char
           echo "DEBUG: DOCKER_TAGS=${DOCKER_TAGS}"
