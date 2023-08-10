@@ -1,0 +1,50 @@
+# nfpm configuration file
+#
+# check https://nfpm.goreleaser.com/configuration for detailed usage
+#
+name: "ziti-cli"
+arch: "amd64"
+platform: "linux"
+version: "v1.0.0"
+section: "default"
+priority: "extra"
+# replaces:
+# - foobar
+# provides:
+# - bar
+# depends:
+# - foo
+# - bar
+# recommends:
+# - whatever
+# suggests:
+# - something-else
+# conflicts:
+# - not-foo
+# - not-bar
+maintainer: "John Doe <john@example.com>"
+description: |
+  FooBar is the great foo and bar software.
+    And this can be in multiple lines!
+vendor: "FooBarCorp"
+homepage: "http://example.com"
+license: "MIT"
+# changelog: "changelog.yaml"
+contents:
+- src: ./build/ziti
+  dst: /usr/bin/ziti
+# - src: ./foobar.conf
+#   dst: /etc/foobar.conf
+#   type: config
+# - src: /usr/bin/foo
+#   dst: /sbin/foo
+#   type: symlink
+# overrides:
+  # rpm:
+  #   scripts:
+  #     preinstall: ./scripts/preinstall.sh
+  #     postremove: ./scripts/postremove.sh
+  # deb:
+  #   scripts:
+  #     postinstall: ./scripts/postinstall.sh
+  #     preremove: ./scripts/preremove.sh

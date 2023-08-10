@@ -1,0 +1,45 @@
+name: Publish Linux Install Packages
+
+on:
+  workflow_call:
+    inputs:
+      ziti-version:
+        description: 'Tag or Branch Ref to Publish'
+        type: string
+        required: true
+
+jobs:
+  publish-linux-packages:
+    runs-on: ubuntu-latest
+    env:
+      ZITI_VERSION: ${{ inputs.ziti-version || github.event.inputs.ziti-version }}
+    steps:
+      - name: Checkout Workspace
+        uses: actions/checkout@v3
+
+      - name: Download Linux Release Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: linux-release-${{ github.run_id }}
+          path: release/
+
+      - name: Install Gomplate
+        uses: jason-dour/action-setup-gomplate@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: gomplate --version
+      
+      - run: ls -lhR release/
+
+      - name: Build Debian Package
+        id: nfpm-deb
+        uses: burningalchemist/action-gh-nfpm@v1
+        with:
+          packager: rpm
+          config: packaging/conf/nfpm.yaml
+          target: package.rpm
+
+      - name: get the package name from the output
+        run: echo ${{ steps.nfpm-rpm.outputs.package }}
+        shell: bash
