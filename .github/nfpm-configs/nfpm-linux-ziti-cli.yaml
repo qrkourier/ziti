@@ -3,11 +3,11 @@
 # check https://nfpm.goreleaser.com/configuration for detailed usage
 #
 name: "ziti-cli"
-arch: "amd64"
+arch: "${GOARCH}"
 platform: "linux"
-version: "v1.0.0"
-section: "default"
-priority: "extra"
+version: "${ZITI_VERSION}"
+# section: default
+# priority: optional
 # replaces:
 # - foobar
 # provides:
@@ -22,16 +22,15 @@ priority: "extra"
 # conflicts:
 # - not-foo
 # - not-bar
-maintainer: "John Doe <john@example.com>"
+maintainer: "${ZITI_MAINTAINER}"
 description: |
-  FooBar is the great foo and bar software.
-    And this can be in multiple lines!
-vendor: "FooBarCorp"
-homepage: "http://example.com"
-license: "MIT"
+  The ziti-cli package provides the ziti executable binary as a command line interface for Ziti.
+vendor: "${ZITI_VENDOR}"
+homepage: "${ZITI_HOMEPAGE}"
+license: Apache-2.0
 # changelog: "changelog.yaml"
 contents:
-- src: ./build/ziti
+- src: ./release/ziti
   dst: /usr/bin/ziti
 # - src: ./foobar.conf
 #   dst: /etc/foobar.conf

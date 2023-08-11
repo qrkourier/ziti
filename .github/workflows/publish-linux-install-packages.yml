@@ -11,8 +11,23 @@ on:
 jobs:
   publish-linux-packages:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch:
+          - go_arch: amd64
+            ziti_arch: amd64
+          - go_arch: arm64
+            ziti_arch: arm64
+          - go_arch: armv7
+            ziti_arch: arm
+        nfpm_packager:
+          - rpm
+          - deb
+          # - archlinux
+          # - apk
     env:
       ZITI_VERSION: ${{ inputs.ziti-version || github.event.inputs.ziti-version }}
+      GOARCH: ${{ matrix.arch.go_arch }}
     steps:
       - name: Checkout Workspace
         uses: actions/checkout@v3
@@ -23,23 +38,18 @@ jobs:
           name: linux-release-${{ github.run_id }}
           path: release/
 
-      - name: Install Gomplate
-        uses: jason-dour/action-setup-gomplate@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - run: gomplate --version
-      
       - run: ls -lhR release/
 
-      - name: Build Debian Package
-        id: nfpm-deb
+      - run: mv -v ./release/${{ matrix.arch.ziti_arch }}/linux/ziti ./release/ziti
+
+      - name: Build Package
+        id: nfpm
         uses: burningalchemist/action-gh-nfpm@v1
         with:
-          packager: rpm
-          config: packaging/conf/nfpm.yaml
-          target: package.rpm
+          packager: ${{ matrix.nfpm_packager }}
+          config: .github/nfpm-configs/nfpm-linux-ziti-cli.yaml
+          # target: package.rpm
 
       - name: get the package name from the output
-        run: echo ${{ steps.nfpm-rpm.outputs.package }}
+        run: echo ${{ steps.nfpm.outputs.package }}
         shell: bash
