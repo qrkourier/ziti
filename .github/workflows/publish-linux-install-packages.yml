@@ -14,12 +14,12 @@ jobs:
     strategy:
       matrix:
         arch:
-          - go_arch: amd64
-            ziti_arch: amd64
-          - go_arch: arm64
-            ziti_arch: arm64
-          - go_arch: armv7
-            ziti_arch: arm
+          - goreleaser: amd64
+            gox: amd64
+          - goreleaser: arm64
+            gox: arm64
+          - goreleaser: armv7
+            gox: arm
         nfpm_packager:
           - rpm
           - deb
@@ -27,7 +27,10 @@ jobs:
           # - apk
     env:
       ZITI_VERSION: ${{ inputs.ziti-version || github.event.inputs.ziti-version }}
-      GOARCH: ${{ matrix.arch.go_arch }}
+      ZITI_MAINTAINER: "OpenZiti Maintainers <ziggy@openziti.io>"
+      ZITI_HOMEPAGE: "https://openziti.io"
+      ZITI_VENDOR: "NetFoundry"
+      GOARCH: ${{ matrix.arch.goreleaser }}
     steps:
       - name: Checkout Workspace
         uses: actions/checkout@v3
@@ -40,12 +43,13 @@ jobs:
 
       - run: ls -lhR release/
 
-      - run: mv -v ./release/${{ matrix.arch.ziti_arch }}/linux/ziti ./release/ziti
+      - run: mv -v ./release/${{ matrix.arch.gox }}/linux/ziti ./release/ziti
 
       - name: Build Package
         id: nfpm
         uses: burningalchemist/action-gh-nfpm@v1
         with:
+          nfpm_version: "2.32.0"
           packager: ${{ matrix.nfpm_packager }}
           config: .github/nfpm-configs/nfpm-linux-ziti-cli.yaml
           # target: package.rpm
