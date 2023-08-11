@@ -383,9 +383,7 @@ jobs:
     if: |
       always()
       && needs.publish.result == 'success'
-      && (
-        github.ref == 'refs/heads/main' || github.ref == 'refs/heads/build-linux-packages'
-      )
+      && github.ref == 'refs/heads/main'
     name: Publish Release Linux Packages
     needs: publish
     uses: ./.github/workflows/publish-linux-packages.yml
