@@ -326,7 +326,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REF: ${{ github.ref }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           ZITI_VERSION="$($(go env GOPATH)/bin/ziti-ci -q get-current-version)"
           # drop the leading 'v', if any
@@ -335,13 +335,13 @@ jobs:
             # fail the job because we could not obtain the current version from ziti-ci
             echo "ERROR: ZITI_VERSION=${ZITI_VERSION} is not a semver"
             exit 1
-          elif [[ "${GITHUB_REF}" =~ ^refs/heads/(release-v|main$) ]]; then
+          elif [[ "${GITHUB_REF}" =~ ^refs/heads/(release-v[0-9]+\.[0-9]+\.[0-9]+|main)$ ]]; then
             # Set output parameters for release branches
             echo "DEBUG: ZITI_VERSION=${ZITI_VERSION}"
             echo ZITI_VERSION="${ZITI_VERSION}" >> $GITHUB_OUTPUT
           else
-            # Append build / run number for non-release refs
-            ZITI_VERSION="${ZITI_VERSION}-${GITHUB_RUN_ID}"
+            # Append short sha for non-release refs to identify Jenkins smoketest runs
+            ZITI_VERSION="${ZITI_VERSION}-$(git rev-parse --short ${GITHUB_SHA})"
             echo "DEBUG: ZITI_VERSION=${ZITI_VERSION}"
             echo ZITI_VERSION="${ZITI_VERSION}" >> $GITHUB_OUTPUT
           fi
@@ -380,7 +380,8 @@ jobs:
     uses: ./.github/workflows/publish-docker-images.yml
     secrets: inherit
     with:
-      ziti-version: release-next
+      ziti-tag: release-next
+      quickstart-ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   call-publish-release-docker-images:
     # always() re-enables evaluating conditionals in forks even if Windows or
@@ -394,7 +395,8 @@ jobs:
     uses: ./.github/workflows/publish-docker-images.yml
     secrets: inherit
     with:
-      ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
+      ziti-tag: ${{ needs.publish.outputs.ZITI_VERSION }}
+      quickstart-ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   # call on release-next and main branches to publish linux packages to
   # "testing" and "release" package repos in Artifactory
