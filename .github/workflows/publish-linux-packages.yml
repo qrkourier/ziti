@@ -39,8 +39,8 @@ jobs:
       ZITI_HOMEPAGE: "https://openziti.io"
       ZITI_VENDOR: "NetFoundry"
       GOARCH: ${{ matrix.arch.goreleaser }}
-      ZITI_DEB_REPO: ${{ vars.ZITI_DEB_REPO || "zitipax-openziti-deb-stable" }}
-      ZITI_RPM_REPO: ${{ vars.ZITI_RPM_REPO || "zitipax-openziti-rpm-stable" }}
+      ZITI_DEB_REPO: ${{ vars.ZITI_DEB_REPO || 'zitipax-openziti-deb-stable' }}
+      ZITI_RPM_REPO: ${{ vars.ZITI_RPM_REPO || 'zitipax-openziti-rpm-stable' }}
     steps:
       - name: Checkout Workspace
         uses: actions/checkout@v3
