@@ -381,7 +381,7 @@ jobs:
     secrets: inherit
     with:
       ziti-tag: release-next
-      quickstart-ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
+      ziti-quickstart-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   call-publish-release-docker-images:
     # always() re-enables evaluating conditionals in forks even if Windows or
@@ -396,7 +396,7 @@ jobs:
     secrets: inherit
     with:
       ziti-tag: ${{ needs.publish.outputs.ZITI_VERSION }}
-      quickstart-ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
+      ziti-quickstart-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   # call on release-next and main branches to publish linux packages to
   # "testing" and "release" package repos in Artifactory
