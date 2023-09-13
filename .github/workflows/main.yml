@@ -321,7 +321,9 @@ jobs:
           $(go env GOPATH)/bin/ziti-ci tag -v -f version
           $(go env GOPATH)/bin/ziti-ci publish-to-github --archive-base ""
 
-      # only ziti-ci computed version for release branches and {version}-{run_id} for non-release branches
+      # ziti-ci computed version for release branches and {version}-{short_sha} for non-release branches is consumed by
+      # the Jenkins smoketest to identify the triggering event in GitHub, and consumed by the publish-docker-images
+      # workflow to tag the docker images
       - name: Compute the Ziti Version String for CI Jobs
         id: get_version
         env:
@@ -341,7 +343,8 @@ jobs:
             echo "DEBUG: ZITI_VERSION=${ZITI_VERSION}"
             echo ZITI_VERSION="${ZITI_VERSION}" >> $GITHUB_OUTPUT
           else
-            # Append short sha for non-release refs to identify Jenkins smoketest runs
+            # Append short sha for non-release refs to identify Jenkins smoketest runs and quickstart docker images
+            # shipped from release-next
             ZITI_VERSION="${ZITI_VERSION}-$(git rev-parse --short ${GITHUB_SHA})"
             echo "DEBUG: ZITI_VERSION=${ZITI_VERSION}"
             echo ZITI_VERSION="${ZITI_VERSION}" >> $GITHUB_OUTPUT
