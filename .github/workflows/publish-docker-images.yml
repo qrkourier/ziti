@@ -57,10 +57,11 @@ jobs:
       - name: Set Up Container Image Tags for Base CLI Container
         env:
           IMAGE_REPO: ${{ env.ZITI_CLI_IMAGE }}
+          IMAGE_TAG: ${{ env.ZITI_CLI_TAG }}
         id: tagprep_cli
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${IMAGE_REPO}:${ZITI_TAG}"
+          DOCKER_TAGS="${IMAGE_REPO}:${IMAGE_TAG}"
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             DOCKER_TAGS+=",${IMAGE_REPO}:latest"
           fi
@@ -85,10 +86,11 @@ jobs:
       - name: Set Up Container Image Tags for Controller Container
         env:
           IMAGE_REPO: ${{ env. ZITI_CONTROLLER_IMAGE }}
+          IMAGE_TAG: ${{ env.ZITI_CLI_TAG }}
         id: tagprep_ctrl
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${IMAGE_REPO}:${ZITI_TAG}"
+          DOCKER_TAGS="${IMAGE_REPO}:${IMAGE_TAG}"
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             DOCKER_TAGS+=",${IMAGE_REPO}:latest"
           fi
@@ -113,10 +115,11 @@ jobs:
       - name: Set Up Container Image Tags for Router Container
         env:
           IMAGE_REPO: ${{ env.ZITI_ROUTER_IMAGE }}
+          IMAGE_TAG: ${{ env.ZITI_CLI_TAG }}
         id: tagprep_router
         run: |
           DOCKER_TAGS=""
-          DOCKER_TAGS="${IMAGE_REPO}:${ZITI_TAG}"
+          DOCKER_TAGS="${IMAGE_REPO}:${IMAGE_TAG}"
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             DOCKER_TAGS+=",${IMAGE_REPO}:latest"
           fi
@@ -131,19 +134,20 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tagprep_router.outputs.DOCKER_TAGS }}
           build-args: |
-            ZITI_CLI_TAG=${{ env.ZITI_TAG }}
+            ZITI_CLI_TAG=${{ env.ZITI_CLI_TAG }}
             ZITI_CLI_IMAGE=${{ env.ZITI_CLI_IMAGE }}
           push: true
 
       - name: Set Up Container Image Tags for Go Tunneler Container
         env:
           IMAGE_REPO: ${{ env.ZITI_TUNNEL_IMAGE }}
+          IMAGE_TAG: ${{ env.ZITI_CLI_TAG }}
           LEGACY_REPO: netfoundry/ziti-tunnel
         id: tagprep_tun
         run: |
           DOCKER_TAGS=""
           for REPO in ${LEGACY_REPO} ${IMAGE_REPO}; do
-            DOCKER_TAGS="${IMAGE_REPO}:${ZITI_TAG}"
+            DOCKER_TAGS="${IMAGE_REPO}:${IMAGE_TAG}"
             if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
               DOCKER_TAGS+=",${IMAGE_REPO}:latest"
             fi
