@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
 
 # cancel older, redundant runs of same workflow on same branch
-# concurrency:
-#   group: ${{ github.workflow }}-${{github.event_name}}-${{ github.head_ref || github.ref_name }}
-#   cancel-in-progress: true
+concurrency:
+  group: ${{ github.workflow }}-${{github.event_name}}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 env:
   GOFLAGS: "-trimpath"
@@ -321,7 +321,7 @@ jobs:
           $(go env GOPATH)/bin/ziti-ci tag -v -f version
           $(go env GOPATH)/bin/ziti-ci publish-to-github --archive-base ""
 
-      # ziti-ci computed version for release branches and {version}-{short_sha} for non-release branches is consumed by
+      # ziti-ci computed {version} for release branches and {version}-{short_sha} for non-release branches is consumed by
       # the Jenkins smoketest to identify the triggering event in GitHub, and consumed by the publish-docker-images
       # workflow to tag the docker images
       - name: Compute the Ziti Version String for CI Jobs
