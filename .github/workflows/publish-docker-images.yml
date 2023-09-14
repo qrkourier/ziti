@@ -12,7 +12,7 @@ on:
           Version of ziti to publish in the quickstart container image. This is a semver 0.1.2 when called on a Ziti
           release, and has a short-sha suffix 0.1.2-b73fe01b when this workflow is called from a pre-release run like
           release-next. The suffix is trimmed so that the preceding release version is installed in the quickstart
-          continer image. See https://github.com/openziti/ziti/issues/898
+          container image. See https://github.com/openziti/ziti/issues/898
         type: string
         required: true
 
@@ -174,7 +174,6 @@ jobs:
         env:
           IMAGE_REPO: ${{ env.ZITI_QUICKSTART_IMAGE }}
           IMAGE_TAG: ${{ env.ZITI_QUICKSTART_TAG }}
-          ZITI_QUICKSTART_VERSION: ${{ env.ZITI_VERSION_OVERRIDE }}
         id: tagprep_qs
         run: |
           DOCKER_TAGS=""
@@ -186,8 +185,9 @@ jobs:
           echo DOCKER_TAGS="${DOCKER_TAGS}" >> $GITHUB_OUTPUT
 
           # configure the env var used by the quickstart's Dockerfile to download the correct version of ziti for the
-          # target architecture of each image build
-          ZITI_OVERRIDE_VERSION=${ZITI_QUICKSTART_VERSION%-*}
+          # target architecture of each image build by trimming the hyphenated short sha suffix so that the preceding
+          # release version of the ziti executable is installed in the quickstart container image
+          ZITI_OVERRIDE_VERSION=${IMAGE_TAG%-*}
           echo "DEBUG: ZITI_OVERRIDE_VERSION=${ZITI_OVERRIDE_VERSION}"
           echo ZITI_OVERRIDE_VERSION="${ZITI_OVERRIDE_VERSION}" >> $GITHUB_OUTPUT
 
