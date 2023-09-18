@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - release-v*
+      - release-v*.*.x
       - release-next
   pull_request:
   workflow_dispatch:
@@ -338,7 +338,7 @@ jobs:
             # fail the job because we could not obtain the current version from ziti-ci
             echo "ERROR: ZITI_VERSION=${ZITI_VERSION} is not a semver"
             exit 1
-          elif [[ "${GITHUB_REF}" =~ ^refs/heads/(release-v[0-9]+\.[0-9]+\.[0-9]+|main)$ ]]; then
+          elif [[ "${GITHUB_REF}" =~ ^refs/heads/(release-v[0-9]+\.[0-9]+\.x|main)$ ]]; then
             # Set output parameters for release branches
             echo "DEBUG: ZITI_VERSION=${ZITI_VERSION}"
             echo ZITI_VERSION="${ZITI_VERSION}" >> $GITHUB_OUTPUT
