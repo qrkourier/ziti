@@ -321,15 +321,13 @@ jobs:
           $(go env GOPATH)/bin/ziti-ci tag -v -f version
           $(go env GOPATH)/bin/ziti-ci publish-to-github --archive-base ""
 
-      # ziti-ci computed {version} for release branches and {version}-{short_sha} for non-release branches is consumed by
-      # the Jenkins smoketest to identify the triggering event in GitHub, and consumed by the publish-docker-images
-      # workflow to tag the docker images
+      # only ziti-ci computed version for release branches and {version}-{run_id} for non-release branches
       - name: Compute the Ziti Version String for CI Jobs
         id: get_version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REF: ${{ github.ref }}
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           ZITI_VERSION="$($(go env GOPATH)/bin/ziti-ci -q get-current-version)"
           # drop the leading 'v', if any
@@ -343,9 +341,8 @@ jobs:
             echo "DEBUG: ZITI_VERSION=${ZITI_VERSION}"
             echo ZITI_VERSION="${ZITI_VERSION}" >> $GITHUB_OUTPUT
           else
-            # Append short sha for non-release refs to identify Jenkins smoketest runs and quickstart docker images
-            # shipped from release-next
-            ZITI_VERSION="${ZITI_VERSION}-$(git rev-parse --short ${GITHUB_SHA})"
+            # Append build / run number for non-release refs
+            ZITI_VERSION="${ZITI_VERSION}-${GITHUB_RUN_ID}"
             echo "DEBUG: ZITI_VERSION=${ZITI_VERSION}"
             echo ZITI_VERSION="${ZITI_VERSION}" >> $GITHUB_OUTPUT
           fi
@@ -386,7 +383,6 @@ jobs:
     secrets: inherit
     with:
       ziti-tag: release-next
-      ziti-quickstart-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   call-publish-release-docker-images:
     # - !cancelled() allows evaluating further conditional expressions even if
@@ -402,7 +398,6 @@ jobs:
     secrets: inherit
     with:
       ziti-tag: ${{ needs.publish.outputs.ZITI_VERSION }}
-      ziti-quickstart-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   # call on release-next and main branches to publish linux packages to
   # "testing" and "release" package repos in Artifactory
