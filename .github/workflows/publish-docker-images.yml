@@ -191,6 +191,9 @@ jobs:
           echo "DEBUG: ZITI_OVERRIDE_VERSION=${ZITI_OVERRIDE_VERSION}"
           echo ZITI_OVERRIDE_VERSION="${ZITI_OVERRIDE_VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Debug action
+        uses: hmarr/debug-action@v2.1.0
+
       - name: Build & Push Multi-Platform Quickstart Container Image to Hub
         if: |
           (
