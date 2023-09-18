@@ -191,15 +191,11 @@ jobs:
           echo "DEBUG: ZITI_OVERRIDE_VERSION=${ZITI_OVERRIDE_VERSION}"
           echo ZITI_OVERRIDE_VERSION="${ZITI_OVERRIDE_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Get PR labels
-        id: pr-labels
-        uses: joerick/pr-labels-action@v1.0.9
-
       - name: Build & Push Multi-Platform Quickstart Container Image to Hub
         if: |
           (
             github.ref == 'refs/heads/release-next'
-            && contains(steps.pr-labels.outputs.labels, ' quickstartrelease ')
+            && contains(github.event.pull_request.labels.*.name, 'quickstartrelease')
           ) || (
             github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')
           )
