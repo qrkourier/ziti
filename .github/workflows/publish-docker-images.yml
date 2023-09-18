@@ -168,8 +168,8 @@ jobs:
             ZITI_CLI_IMAGE=${{ env.ZITI_CLI_IMAGE }}
           push: true
 
-      # This container differs in that :latest is pushed from branch release-next in addition to main. See
-      # https://github.com/openziti/ziti/issues/898
+      # This container differs in that :latest is pushed from branch release-next in addition to main and hotfix
+      # branches like releasev1.2.x. See https://github.com/openziti/ziti/issues/898
       - name: Configure Quickstart Container
         env:
           IMAGE_REPO: ${{ env.ZITI_QUICKSTART_IMAGE }}
@@ -178,7 +178,7 @@ jobs:
         run: |
           DOCKER_TAGS=""
           DOCKER_TAGS="${IMAGE_REPO}:${IMAGE_TAG}"
-          if [[ "${{ github.ref }}" =~ ^refs/heads/(release-(next|v[0-9]+\.[0-9]+\.[0-9]+)|main)$ ]]; then
+          if [[ "${{ github.ref }}" =~ ^refs/heads/(release-(next|v[0-9]+\.[0-9]+\.x)|main)$ ]]; then
             DOCKER_TAGS+=",${IMAGE_REPO}:latest"
           fi
           echo "DEBUG: DOCKER_TAGS=${DOCKER_TAGS}"
