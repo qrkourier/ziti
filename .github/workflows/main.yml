@@ -391,7 +391,10 @@ jobs:
     if: ${{
         !cancelled()
         && needs.publish.result == 'success'
-        && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v')
+        && (
+          github.ref == 'refs/heads/main'
+          || startsWith(github.ref, 'refs/heads/release-v')
+        )
       }}
     name: Publish Release Docker Images
     needs: publish
@@ -408,7 +411,11 @@ jobs:
     if: ${{
         !cancelled()
         && needs.publish.result == 'success'
-        && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-v' || github.ref == 'refs/heads/release-next')
+        && (
+          github.ref == 'refs/heads/main'
+          || startsWith(github.ref, 'refs/heads/release-v')
+          || github.ref == 'refs/heads/release-next'
+        )
       }}
     name: Publish Linux Packages
     needs: publish
