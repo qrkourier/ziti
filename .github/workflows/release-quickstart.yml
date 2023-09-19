@@ -5,7 +5,7 @@ on:
       - closed
     branches:
       - main
-      - release-v*.*.x
+      - release-v*
       - release-next
 
 jobs:
@@ -68,7 +68,7 @@ jobs:
             # fail the job because we could not obtain the current version from ziti-ci
             echo "ERROR: QUICKSTART_VERSION=${QUICKSTART_VERSION} is not a semver"
             exit 1
-          elif [[ "${GITHUB_REF}" =~ ^refs/heads/(release-v[0-9]+\.[0-9]+\.x|main)$ ]]; then
+          elif [[ "${GITHUB_REF}" =~ ^refs/heads/(release-v|main$) ]]; then
             # Set output parameters for release branches
             echo "DEBUG: QUICKSTART_VERSION=${QUICKSTART_VERSION}"
             echo QUICKSTART_VERSION="${QUICKSTART_VERSION}" >> $GITHUB_OUTPUT
@@ -90,9 +90,7 @@ jobs:
         run: |
           DOCKER_TAGS=""
           DOCKER_TAGS="${IMAGE_REPO}:${IMAGE_TAG}"
-          if [[ "${GITHUB_REF}" =~ ^refs/heads/(release-(next|v[0-9]+\.[0-9]+\.x)|main)$ ]]; then
-            DOCKER_TAGS+=",${IMAGE_REPO}:latest"
-          fi
+          DOCKER_TAGS+=",${IMAGE_REPO}:latest"
           echo "DEBUG: DOCKER_TAGS=${DOCKER_TAGS}"
           echo DOCKER_TAGS="${DOCKER_TAGS}" >> $GITHUB_OUTPUT
 
