@@ -33,6 +33,14 @@ jobs:
       - name: Debug action
         uses: hmarr/debug-action@v2.1.0
 
+      - name: Wait for main build
+        uses: fountainhead/action-wait-for-check@v1.1.0
+        id: wait-for-build
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: build
+          ref: ${{ env.GITHUB_SHA }}
+
       - name: Checkout Workspace
         uses: actions/checkout@v3
 
