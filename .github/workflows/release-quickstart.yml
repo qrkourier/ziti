@@ -34,12 +34,13 @@ jobs:
         uses: hmarr/debug-action@v2.1.0
 
       - name: Wait for main build
-        uses: fountainhead/action-wait-for-check@v1.1.0
-        id: wait-for-build
+        uses: lewagon/wait-on-check-action@v1.3.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          checkName: build
           ref: ${{ env.GITHUB_SHA }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+          # confusingly, this means "run this job after all jobs from all workflows in same run"
+          running-workflow-name: release-quickstart
 
       - name: Checkout Workspace
         uses: actions/checkout@v3
