@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - release-v*.*.x
+      - release-v*
       - release-next
   pull_request:
   workflow_dispatch:
@@ -438,7 +438,7 @@ jobs:
             # fail the job because we could not obtain the current version from ziti-ci
             echo "ERROR: ZITI_VERSION=${ZITI_VERSION} is not a semver"
             exit 1
-          elif [[ "${GITHUB_REF}" =~ ^refs/heads/(release-v[0-9]+\.[0-9]+\.x|main)$ ]]; then
+          elif [[ "${GITHUB_REF}" =~ ^refs/heads/(release-v|main$) ]]; then
             # Set output parameters for release branches
             echo "DEBUG: ZITI_VERSION=${ZITI_VERSION}"
             echo ZITI_VERSION="${ZITI_VERSION}" >> $GITHUB_OUTPUT
@@ -492,7 +492,10 @@ jobs:
     if: ${{
         !cancelled()
         && needs.publish.result == 'success'
-        && github.ref == 'refs/heads/main'
+        && (
+          github.ref == 'refs/heads/main'
+          || startsWith(github.ref, 'refs/heads/release-v')
+        )
       }}
     name: Publish Release Docker Images
     needs: publish
@@ -501,7 +504,7 @@ jobs:
     with:
       ziti-tag: ${{ needs.publish.outputs.ZITI_VERSION }}
 
-  # call on release-next and main branches to publish linux packages to
+  # call on release-next and release branches to publish linux packages to
   # "testing" and "release" package repos in Artifactory
   call-publish-linux-packages:
     # - !cancelled() allows evaluating further conditional expressions even if
@@ -509,7 +512,11 @@ jobs:
     if: ${{
         !cancelled()
         && needs.publish.result == 'success'
-        && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-next')
+        && (
+          github.ref == 'refs/heads/main'
+          || startsWith(github.ref, 'refs/heads/release-v')
+          || github.ref == 'refs/heads/release-next'
+        )
       }}
     name: Publish Linux Packages
     needs: publish
