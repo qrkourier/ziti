@@ -110,15 +110,6 @@ jobs:
         with:
           go-version: '1.20.x'
 
-      # revert me
-      - name: Git Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          repository: qrkourier/ziti-ci
-          ref: v1
-          path: ziti-ci
-
       - name: Install Ziti CI
         # revert me
         uses: qrkourier/ziti-ci@v1
@@ -377,15 +368,6 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.7'
-
-      # revert me
-      - name: Git Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          repository: qrkourier/ziti-ci
-          ref: v1
-          path: ziti-ci
 
       - name: Install Ziti CI
         # revert me
