@@ -84,7 +84,6 @@ jobs:
         uses: openziti/ziti-ci@v1
 
       - name: Build and Test
-        shell: bash
         run: |
           go install github.com/mitchellh/gox@latest
           $(go env GOPATH)/bin/ziti-ci generate-build-info common/version/info_generated.go version
@@ -111,11 +110,21 @@ jobs:
         with:
           go-version: '1.20.x'
 
+      # revert me
+      - name: Git Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          repository: qrkourier/ziti-ci
+          ref: v1
+          path: ziti-ci
+
       - name: Install Ziti CI
-        uses: openziti/ziti-ci@v1
+        # revert me
+        uses: qrkourier/ziti-ci@v1
+        # uses: openziti/ziti-ci@v1
 
       - name: Build and Test
-        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get -yq install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf gcc-aarch64-linux-gnu
@@ -344,11 +353,10 @@ jobs:
     # - !cancelled() allows evaluating further conditional expressions even if
     #   needed jobs were skipped
     if: ${{ 
-      !cancelled()
-      && (needs.mac-os-build.result == 'success' || needs.mac-os-build.result == 'skipped')
-      && (needs.windows-build.result == 'success' || needs.windows-build.result == 'skipped')
-      && (needs.fablab-smoketest.result == 'success' || needs.fablab-smoketest.result == 'skipped') 
-      && (needs.fablab-ha-smoketest.result == 'success' || needs.fablab-ha-smoketest.result == 'skipped')
+        !cancelled()
+        && (needs.mac-os-build.result == 'success' || needs.mac-os-build.result == 'skipped')
+        && (needs.windows-build.result == 'success' || needs.windows-build.result == 'skipped')
+        && (needs.fablab-smoketest.result == 'success' || needs.fablab-smoketest.result == 'skipped') 
       }}
     runs-on: ubuntu-20.04
     needs: [ linux-build, mac-os-build, windows-build, fablab-smoketest, fablab-ha-smoketest ]
@@ -370,8 +378,19 @@ jobs:
         with:
           python-version: '3.7'
 
+      # revert me
+      - name: Git Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          repository: qrkourier/ziti-ci
+          ref: v1
+          path: ziti-ci
+
       - name: Install Ziti CI
-        uses: openziti/ziti-ci@v1
+        # revert me
+        uses: qrkourier/ziti-ci@v1
+        # uses: openziti/ziti-ci@v1
 
       - name: Download linux release artifact
         uses: actions/download-artifact@v3
@@ -476,41 +495,48 @@ jobs:
     # - !cancelled() allows evaluating further conditional expressions even if
     #   needed jobs were skipped
     if: ${{
-      !cancelled()
-      && needs.publish.result == 'success'
-      && github.ref == 'refs/heads/release-next'
+        !cancelled()
+        && needs.publish.result == 'success'
+        && github.ref == 'refs/heads/release-next'
       }}
     name: Publish Pre-Release Docker Images
     needs: publish
     uses: ./.github/workflows/publish-docker-images.yml
     secrets: inherit
     with:
-      ziti-version: release-next
+      ziti-tag: release-next
 
   call-publish-release-docker-images:
     # - !cancelled() allows evaluating further conditional expressions even if
     #   needed jobs were skipped
     if: ${{
-      !cancelled()
-      && needs.publish.result == 'success'
-      && github.ref == 'refs/heads/main'
+        !cancelled()
+        && needs.publish.result == 'success'
+        && (
+          github.ref == 'refs/heads/main'
+          || startsWith(github.ref, 'refs/heads/release-v')
+        )
       }}
     name: Publish Release Docker Images
     needs: publish
     uses: ./.github/workflows/publish-docker-images.yml
     secrets: inherit
     with:
-      ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
+      ziti-tag: ${{ needs.publish.outputs.ZITI_VERSION }}
 
-  # call on release-next and main branches to publish linux packages to
+  # call on release-next and release branches to publish linux packages to
   # "testing" and "release" package repos in Artifactory
   call-publish-linux-packages:
     # - !cancelled() allows evaluating further conditional expressions even if
     #   needed jobs were skipped
     if: ${{
-      !cancelled()
-      && needs.publish.result == 'success'
-      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-next')
+        !cancelled()
+        && needs.publish.result == 'success'
+        && (
+          github.ref == 'refs/heads/main'
+          || startsWith(github.ref, 'refs/heads/release-v')
+          || github.ref == 'refs/heads/release-next'
+        )
       }}
     name: Publish Linux Packages
     needs: publish
