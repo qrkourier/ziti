@@ -790,7 +790,8 @@ main(){
 
     logInfo "installing openziti controller chart"
     (( ZITI_CHARTS_ALT )) && {
-        helmWrapper dependency update "${ZITI_CHARTS_REF}/ziti-controller" >&3
+        logDebug "building ${ZITI_CHARTS_REF}/ziti-controller Helm Chart dependencies"
+        helmWrapper dependency build "${ZITI_CHARTS_REF}/ziti-controller" >&3
     }
     helmWrapper upgrade --install "ziti-controller" "${ZITI_CHARTS_REF}/ziti-controller" \
         --namespace "${ZITI_NAMESPACE}" --create-namespace \
@@ -953,7 +954,8 @@ EOF
 
     logDebug "installing router chart as 'ziti-router'"
     (( ZITI_CHARTS_ALT )) && {
-        helmWrapper dependency update "${ZITI_CHARTS_REF}/ziti-router" >&3
+        logDebug "building ${ZITI_CHARTS_REF}/ziti-router Helm Chart dependencies"
+        helmWrapper dependency build "${ZITI_CHARTS_REF}/ziti-router" >&3
     }
     helmWrapper upgrade --install "ziti-router" "${ZITI_CHARTS_REF}/ziti-router" \
         --namespace "${ZITI_NAMESPACE}" \
@@ -985,7 +987,8 @@ EOF
 
     logDebug "installing console chart as 'ziti-console'"
     (( ZITI_CHARTS_ALT )) && {
-        helmWrapper dependency update "${ZITI_CHARTS_REF}/ziti-console" >&3
+        logDebug "building ${ZITI_CHARTS_REF}/ziti-console Helm Chart dependencies"
+        helmWrapper dependency build "${ZITI_CHARTS_REF}/ziti-console" >&3
     }
     helmWrapper upgrade --install "ziti-console" "${ZITI_CHARTS_REF}/ziti-console" \
         --namespace "${ZITI_NAMESPACE}" \
@@ -1104,7 +1107,7 @@ EOF
     if [[ -s "$HTTPBIN_OTT" ]]; then
         logDebug "installing httpbin chart as 'miniziti-httpbin'"
         (( ZITI_CHARTS_ALT )) && {
-            helmWrapper dependency update "${ZITI_CHARTS_REF}/httpbin" >&3
+            helmWrapper dependency build "${ZITI_CHARTS_REF}/httpbin" >&3
         }
         helmWrapper install "miniziti-httpbin" "${ZITI_CHARTS_REF}/httpbin" \
             --set-file zitiEnrollment="$HTTPBIN_OTT" \
