@@ -409,7 +409,9 @@ jobs:
           python-version: '3.7'
 
       - name: Install Ziti CI
-        uses: openziti/ziti-ci@v1
+        # TODO: revert prior to merge
+        uses: qrkourier/ziti-ci@v1
+        # uses: openziti/ziti-ci@v1
 
       - name: Download linux release artifact
         uses: actions/download-artifact@v3
