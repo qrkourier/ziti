@@ -97,11 +97,13 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ${{ github.workspace }}/dist/docker-images/ziti-controller/
+          file: ${{ github.workspace }}/dist/docker-images/ziti-controller/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tagprep_ctrl.outputs.DOCKER_TAGS }}
           build-args: |
             ZITI_CLI_TAG=${{ env.ZITI_CLI_TAG }}
             ZITI_CLI_IMAGE=${{ env.ZITI_CLI_IMAGE }}
+            DOCKER_BUILD_DIR=./dist/docker-images/ziti-controller
           push: true
 
       - name: Set Up Container Image Tags for Router Container
