@@ -17,8 +17,8 @@
 package subcmd
 
 import (
-	"github.com/openziti/ziti/common/version"
 	"fmt"
+	"github.com/openziti/ziti/common/version"
 	"github.com/spf13/cobra"
 )
 
@@ -30,6 +30,6 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show component version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(version.GetBuildMetadata(verbose))
+		fmt.Println(version.GetVersion())
 	},
 }
