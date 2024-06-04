@@ -868,7 +868,7 @@ func (strategy *InstantStrategy) BuildServicePolicies(tx *bbolt.Tx, rdm *common.
 			Add:               true,
 		}
 
-		rdm.HandleServicePolicyChange(addServicesEvent)
+		rdm.HandleServicePolicyChange(strategy.indexProvider.CurrentIndex(), addServicesEvent)
 
 		addIdentitiesEvent := &edge_ctrl_pb.DataState_ServicePolicyChange{
 			PolicyId:          currentId,
@@ -876,7 +876,7 @@ func (strategy *InstantStrategy) BuildServicePolicies(tx *bbolt.Tx, rdm *common.
 			RelatedEntityType: edge_ctrl_pb.ServicePolicyRelatedEntityType_RelatedIdentity,
 			Add:               true,
 		}
-		rdm.HandleServicePolicyChange(addIdentitiesEvent)
+		rdm.HandleServicePolicyChange(strategy.indexProvider.CurrentIndex(), addIdentitiesEvent)
 
 		addPostureChecksEvent := &edge_ctrl_pb.DataState_ServicePolicyChange{
 			PolicyId:          currentId,
@@ -884,7 +884,7 @@ func (strategy *InstantStrategy) BuildServicePolicies(tx *bbolt.Tx, rdm *common.
 			RelatedEntityType: edge_ctrl_pb.ServicePolicyRelatedEntityType_RelatedPostureCheck,
 			Add:               true,
 		}
-		rdm.HandleServicePolicyChange(addPostureChecksEvent)
+		rdm.HandleServicePolicyChange(strategy.indexProvider.CurrentIndex(), addPostureChecksEvent)
 	}
 
 	return nil
@@ -955,19 +955,20 @@ func (strategy *InstantStrategy) BuildPublicKeys(tx *bbolt.Tx, rdm *common.Route
 
 func (strategy *InstantStrategy) BuildAll(rdm *common.RouterDataModel) error {
 	err := strategy.ae.GetDbProvider().GetDb().View(func(tx *bbolt.Tx) error {
-		if err := strategy.BuildConfigTypes(tx, rdm); err != nil {
+		index := strategy.indexProvider.CurrentIndex()
+		if err := strategy.BuildConfigTypes(index, tx, rdm); err != nil {
 			return err
 		}
 
-		if err := strategy.BuildConfigs(tx, rdm); err != nil {
+		if err := strategy.BuildConfigs(index, tx, rdm); err != nil {
 			return err
 		}
 
-		if err := strategy.BuildIdentities(tx, rdm); err != nil {
+		if err := strategy.BuildIdentities(index, tx, rdm); err != nil {
 			return err
 		}
 
-		if err := strategy.BuildServices(tx, rdm); err != nil {
+		if err := strategy.BuildServices(index, tx, rdm); err != nil {
 			return err
 		}
 
@@ -991,7 +992,7 @@ func (strategy *InstantStrategy) BuildAll(rdm *common.RouterDataModel) error {
 	return err
 }
 
-func (strategy *InstantStrategy) BuildConfigTypes(tx *bbolt.Tx, rdm *common.RouterDataModel) error {
+func (strategy *InstantStrategy) BuildConfigTypes(index uint64, tx *bbolt.Tx, rdm *common.RouterDataModel) error {
 	for cursor := strategy.ae.GetStores().ConfigType.IterateIds(tx, ast.BoolNodeTrue); cursor.IsValid(); cursor.Next() {
 		currentBytes := cursor.Current()
 		currentId := string(currentBytes)
@@ -1007,14 +1008,14 @@ func (strategy *InstantStrategy) BuildConfigTypes(tx *bbolt.Tx, rdm *common.Rout
 			Action: edge_ctrl_pb.DataState_Create,
 			Model:  newModel,
 		}
-		rdm.HandleConfigTypeEvent(newEvent, newModel)
+		rdm.HandleConfigTypeEvent(index, newEvent, newModel)
 	}
 
 	return nil
 }
 
 func (strategy *InstantStrategy) ValidateConfigTypes(tx *bbolt.Tx, rdm *common.RouterDataModel) []error {
-	return ValidateType(tx, strategy.ae.GetStores().ConfigType, rdm.ConfigTypes, func(t *db.ConfigType, v *edge_ctrl_pb.DataState_ConfigType) []error {
+	return ValidateType(tx, strategy.ae.GetStores().ConfigType, rdm.ConfigTypes, func(t *db.ConfigType, v *common.ConfigType) []error {
 		var result []error
 		result = diffVals("config type", t.Id, "name", t.Name, v.Name, result)
 		return result
@@ -1022,7 +1023,7 @@ func (strategy *InstantStrategy) ValidateConfigTypes(tx *bbolt.Tx, rdm *common.R
 }
 
 func (strategy *InstantStrategy) ValidateConfigs(tx *bbolt.Tx, rdm *common.RouterDataModel) []error {
-	return ValidateType(tx, strategy.ae.GetStores().Config, rdm.Configs, func(t *db.Config, v *edge_ctrl_pb.DataState_Config) []error {
+	return ValidateType(tx, strategy.ae.GetStores().Config, rdm.Configs, func(t *db.Config, v *common.Config) []error {
 		var result []error
 		result = diffVals("config", t.Id, "name", t.Name, v.Name, result)
 
@@ -1059,7 +1060,7 @@ func (strategy *InstantStrategy) ValidateIdentities(tx *bbolt.Tx, rdm *common.Ro
 }
 
 func (strategy *InstantStrategy) ValidateServices(tx *bbolt.Tx, rdm *common.RouterDataModel) []error {
-	return ValidateType(tx, strategy.ae.GetStores().EdgeService, rdm.Services, func(t *db.EdgeService, v *edge_ctrl_pb.DataState_Service) []error {
+	return ValidateType(tx, strategy.ae.GetStores().EdgeService, rdm.Services, func(t *db.EdgeService, v *common.Service) []error {
 		var result []error
 		result = diffVals("service", t.Id, "name", t.Name, v.Name, result)
 		result = diffVals("service", t.Id, "encryption required", t.EncryptionRequired, v.EncryptionRequired, result)
@@ -1241,7 +1242,7 @@ func ValidateType[T boltz.ExtEntity, V any](tx *bbolt.Tx, store db.Store[T], m c
 	return result
 }
 
-func (strategy *InstantStrategy) BuildConfigs(tx *bbolt.Tx, rdm *common.RouterDataModel) error {
+func (strategy *InstantStrategy) BuildConfigs(index uint64, tx *bbolt.Tx, rdm *common.RouterDataModel) error {
 	for cursor := strategy.ae.GetStores().Config.IterateIds(tx, ast.BoolNodeTrue); cursor.IsValid(); cursor.Next() {
 		currentBytes := cursor.Current()
 		currentId := string(currentBytes)
@@ -1257,13 +1258,13 @@ func (strategy *InstantStrategy) BuildConfigs(tx *bbolt.Tx, rdm *common.RouterDa
 			Action: edge_ctrl_pb.DataState_Create,
 			Model:  newModel,
 		}
-		rdm.HandleConfigEvent(newEvent, newModel)
+		rdm.HandleConfigEvent(index, newEvent, newModel)
 	}
 
 	return nil
 }
 
-func (strategy *InstantStrategy) BuildIdentities(tx *bbolt.Tx, rdm *common.RouterDataModel) error {
+func (strategy *InstantStrategy) BuildIdentities(index uint64, tx *bbolt.Tx, rdm *common.RouterDataModel) error {
 	for cursor := strategy.ae.GetStores().Identity.IterateIds(tx, ast.BoolNodeTrue); cursor.IsValid(); cursor.Next() {
 		currentBytes := cursor.Current()
 		currentId := string(currentBytes)
@@ -1280,13 +1281,13 @@ func (strategy *InstantStrategy) BuildIdentities(tx *bbolt.Tx, rdm *common.Route
 			Action: edge_ctrl_pb.DataState_Create,
 			Model:  newModel,
 		}
-		rdm.HandleIdentityEvent(newEvent, newModel)
+		rdm.HandleIdentityEvent(index, newEvent, newModel)
 	}
 
 	return nil
 }
 
-func (strategy *InstantStrategy) BuildServices(tx *bbolt.Tx, rdm *common.RouterDataModel) error {
+func (strategy *InstantStrategy) BuildServices(index uint64, tx *bbolt.Tx, rdm *common.RouterDataModel) error {
 	for cursor := strategy.ae.GetStores().EdgeService.IterateIds(tx, ast.BoolNodeTrue); cursor.IsValid(); cursor.Next() {
 		currentBytes := cursor.Current()
 		currentId := string(currentBytes)
@@ -1302,7 +1303,7 @@ func (strategy *InstantStrategy) BuildServices(tx *bbolt.Tx, rdm *common.RouterD
 			Action: edge_ctrl_pb.DataState_Create,
 			Model:  newModel,
 		}
-		rdm.HandleServiceEvent(newEvent, newModel)
+		rdm.HandleServiceEvent(index, newEvent, newModel)
 	}
 
 	return nil
@@ -1477,6 +1478,7 @@ func newConfig(entity *db.Config) (*edge_ctrl_pb.DataState_Config, error) {
 
 	return &edge_ctrl_pb.DataState_Config{
 		Id:       entity.Id,
+		TypeId:   entity.Type,
 		Name:     entity.Name,
 		DataJson: string(jsonData),
 	}, nil

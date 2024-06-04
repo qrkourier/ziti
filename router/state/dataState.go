@@ -34,7 +34,7 @@ func (dsh *DataStateHandler) HandleReceive(msg *channel.Message, ch channel.Chan
 
 	pfxlog.Logger().WithField("endIndex", newState.EndIndex).Debug("received full router data model state")
 	for _, event := range newState.Events {
-		model.Handle(event)
+		model.Handle(newState.EndIndex, event)
 	}
 
 	model.SetCurrentIndex(newState.EndIndex)
