@@ -225,44 +225,16 @@ jobs:
       # only ziti-ci computed version for release branches and {version}-{run_id} for non-release branches
       - name: Compute the Ziti Version String used for Linux Packages and Container Image Tags
         id: get_version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REF: ${{ github.ref }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
         shell: bash
         run: |
-          # starts with v?1.2.3, optionally trailed by a pre-release identifier (-alpha, -rc, etc)
-          function validateSemver() {
-            if ! [[ "${1}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-              echo "ERROR: ${1} is not a release semver" >&2
-              return 1
-            fi
-          }
-
-          echo "DEBUG: GITHUB_REPOSITORY=${GITHUB_REPOSITORY} GITHUB_REF=${GITHUB_REF} GITHUB_RUN_ID=${GITHUB_RUN_ID}"
-          (set -x; git remote -v show;)
-
-          # Set current tag as semver for release branches
-          ZITI_VERSION="$(sed -E 's|refs/tags/v([0-9]+\.[0-9]+\.[0-9]+.*)|\1|' <<< ${GITHUB_REF})"
-
-          validateSemver "${ZITI_VERSION}"
-
           # drop the leading 'v', if any
-          ZITI_VERSION=${ZITI_VERSION#v}
-
+          ZITI_VERSION=${GITHUB_REF_NAME#v}
           echo ZITI_VERSION="${ZITI_VERSION}" | tee -a $GITHUB_OUTPUT
 
   call-publish-release-docker-images:
     # - !cancelled() allows evaluating further conditional expressions even if
     #   needed jobs were skipped
-    if: ${{
-      !cancelled()
-      && needs.publish.result == 'success'
-      && (
-      github.ref == 'refs/heads/main'
-      || startsWith(github.ref, 'refs/heads/release-v')
-      )
-      }}
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     name: Publish Release Docker Images
     needs: publish
     uses: ./.github/workflows/publish-docker-images.yml
@@ -275,15 +247,7 @@ jobs:
   call-publish-linux-packages:
     # - !cancelled() allows evaluating further conditional expressions even if
     #   needed jobs were skipped
-    if: ${{
-      !cancelled()
-      && needs.publish.result == 'success'
-      && (
-      github.ref == 'refs/heads/main'
-      || startsWith(github.ref, 'refs/heads/release-v')
-      || github.ref == 'refs/heads/release-next'
-      )
-      }}
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     name: Publish Linux Packages
     needs: publish
     uses: ./.github/workflows/publish-linux-packages.yml
