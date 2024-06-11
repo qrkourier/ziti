@@ -148,8 +148,9 @@ message DataState {
 
   message Config {
     string id = 1;
-    string name = 2;
-    string dataJson = 3;
+    string typeId = 2;
+    string name = 3;
+    string dataJson = 4;
   }
 
   message ServiceConfigs {
