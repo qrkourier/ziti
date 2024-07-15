@@ -1,0 +1,14 @@
+name: Always Fail
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  always-fail:
+    name: Always Fail
+    runs-on: ubuntu-latest
+    steps:
+    - name: Always fail step
+      run: exit 1
