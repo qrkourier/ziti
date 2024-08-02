@@ -421,6 +421,7 @@ trap exitHandler EXIT SIGINT SIGTERM
 : "${ZITI_ROUTER_MODE:=host}"  # router will panic if not tunneler-enabled in controller
 : "${ZITI_ROUTER_TPROXY_RESOLVER:=udp://127.0.0.1:53}"  # where to listen for DNS requests in tproxy mode
 : "${ZITI_ROUTER_DNS_IP_RANGE:=100.64.0.1/10}"  # CIDR range of IP addresses to assign to DNS clients in tproxy mode
+: "${ZITI_HOME:=${PWD}}"
 ZITI_BOOTSTRAP_NOW="$(date --utc --iso-8601=seconds)"
 
 # run the bootstrap function if this script is executed directly
