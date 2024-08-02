@@ -22,7 +22,7 @@ jobs:
       ZITI_CONTROLLER_IMAGE: ziti-controller
       ZITI_ROUTER_IMAGE: ziti-router
       IMAGE_TAG: local  # override default :latest since we're not pulling from registry
-      ARTIFACTS_DIR: ${{ github.workspace }}/build  # output dir for `go build`, input dir for `compose up --build`
+      ARTIFACTS_DIR: ${{ github.workspace }}/release/amd64/linux  # output dir for `go build`, input dir for `compose up --build`
       ZIGGY_UID: 1001  # let container EUID run-as GHA "runner" user to share cache, etc.
     steps:
       - name: Shallow checkout
@@ -58,7 +58,6 @@ jobs:
           # platforms: linux/amd64
           tags: ${{ env.ZITI_CLI_IMAGE }}:${{ env.IMAGE_TAG }}
           build-args: |
-            ARTIFACTS_DIR=${{ env.ARTIFACTS_DIR }}
             DOCKER_BUILD_DIR=./dist/docker-images/ziti-cli
           load: true
 
