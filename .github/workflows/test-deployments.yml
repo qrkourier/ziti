@@ -18,12 +18,8 @@ jobs:
     name: Test the Docker Deployments
     runs-on: ubuntu-latest
     env:
-      ZITI_CLI_IMAGE: ziti-cli
-      ZITI_CONTROLLER_IMAGE: ziti-controller
-      ZITI_ROUTER_IMAGE: ziti-router
-      IMAGE_TAG: local  # override default :latest since we're not pulling from registry
-      ARTIFACTS_DIR: ${{ github.workspace }}/release/amd64/linux  # output dir for `go build`, input dir for `compose up --build`
       ZIGGY_UID: 1001  # let container EUID run-as GHA "runner" user to share cache, etc.
+      ZITI_PWD: ziggylicious
     steps:
       - name: Shallow checkout
         uses: actions/checkout@v4
@@ -38,61 +34,60 @@ jobs:
         shell: bash
         run: |
           mkdir -pv ${ARTIFACTS_DIR}
-          go build -o ${ARTIFACTS_DIR} ${GITHUB_WORKSPACE}/...
+          go build -o ${GITHUB_WORKSPACE}/release/amd64/linux ${GITHUB_WORKSPACE}/...
 
-      # - name: Set Up QEMU
-      #   uses: docker/setup-qemu-action@v3
-      #   with:
-      #     platforms: amd64
-
-      # - name: Set Up Docker BuildKit
-      #   id: buildx
-      #   uses: docker/setup-buildx-action@v3
-
-      - name: Build & Load CLI Container Image
+      - name: Build & Load CLI Image
         uses: docker/build-push-action@v6
         with:
           # builder: ${{ steps.buildx.outputs.name }}
           context: ${{ github.workspace }}/
           file: ${{ github.workspace }}/dist/docker-images/ziti-cli/Dockerfile
-          # platforms: linux/amd64
-          tags: ${{ env.ZITI_CLI_IMAGE }}:${{ env.IMAGE_TAG }}
+          tags: ziti-cli:local
           build-args: |
             DOCKER_BUILD_DIR=./dist/docker-images/ziti-cli
           load: true
 
-      - name: Build & Load Controller Container Image
+      - name: Build & Load Controller Image
         uses: docker/build-push-action@v6
         with:
-          # builder: ${{ steps.buildx.outputs.name }}
           context: ${{ github.workspace }}/
           file: ${{ github.workspace }}/dist/docker-images/ziti-controller/Dockerfile
-          # platforms: linux/amd64
-          tags: ziti-controller:${{ env.IMAGE_TAG }}
+          tags: ziti-controller:local
           build-args: |
-            ZITI_CLI_TAG=${{ env.IMAGE_TAG }}
-            ZITI_CLI_IMAGE=${{ env.ZITI_CLI_IMAGE }}
+            ZITI_CLI_TAG=local
+            ZITI_CLI_IMAGE=ziti-cli
             DOCKER_BUILD_DIR=./dist/docker-images/ziti-controller
           load: true
 
-      - name: Build & Push Multi-Platform Router Container Image to Hub
+      - name: Build & Load Router Image
         uses: docker/build-push-action@v6
         with:
-          # builder: ${{ steps.buildx.outputs.name }}
           context: ${{ github.workspace }}/
           file: ${{ github.workspace }}/dist/docker-images/ziti-router/Dockerfile
-          # platforms: linux/amd64
-          tags: ziti-router:${{ env.IMAGE_TAG }}
+          tags: ziti-router:local
           build-args: |
-            ZITI_CLI_TAG=${{ env.IMAGE_TAG }}
-            ZITI_CLI_IMAGE=${{ env.ZITI_CLI_IMAGE }}
+            ZITI_CLI_TAG=local
+            ZITI_CLI_IMAGE=ziti-cli
             DOCKER_BUILD_DIR=./dist/docker-images/ziti-router
           load: true
 
-      - name: Run the all-in-one quickstart with locally-built ziti executable
+      - name: Run the controller
         shell: bash
-        working-directory: ./quickstart/docker/all-in-one
-        run: docker compose up --build --detach
+        working-directory: ./dist/docker-images/ziti-controller
+        run: docker compose up wait-for-login --detach
+        env:
+          ZITI_CONTROLLER_IMAGE: ziti-controller:local
+          ZITI_CTRL_ADVERTISED_ADDRESS: ctrl.127.21.71.0.sslip.io
+
+      - name: Run the Router
+        shell: bash
+        working-directory: ./dist/docker-images/ziti-router
+        run: docker compose --profile test up --detach
+        env:
+          ZITI_CONTROLLER_IMAGE: ziti-controller:local
+          ZITI_PWD: ziggylicious
+          ZITI_ROUTER_IMAGE: ziti-router:local
+          ZITI_GO_VERSION: ${{ steps.setup-go.outputs.go-version }}
 
       - name: Wait for all-in-one quickstart controller then run quickstart tests
         shell: bash
