@@ -2,7 +2,7 @@
 
 # get kubectl CLI from a source with Docker Content Trust (DCT)
 # FIXME: require DCT at build time
-FROM bitnami/kubectl as bitnami-kubectl
+FROM bitnami/kubectl AS bitnami-kubectl
 
 # FIXME: This repo requires terms acceptance and is only available on registry.redhat.io.
 # FROM registry.access.redhat.com/openshift4/ose-cli as openshift-cli  
