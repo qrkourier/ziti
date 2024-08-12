@@ -69,13 +69,15 @@ enroll() {
   
   if [[ -n "${1:-}" && ! "${1}" =~ ^-- ]]; then
     local _config_file="${1}"
+    local _ziti_home
+    _ziti_home="$(dirname "${_config_file}")"
     shift
   else
-    echo "ERROR: no config file path provided" >&2
+    echo "ERROR: no config file path provided in first param" >&2
     return 1
   fi
 
-  if [[ ! -s "${ZITI_HOME}/${ZITI_ROUTER_IDENTITY_CERT}" || "${1:-}" == --force ]]; then
+  if [[ ! -s "${_ziti_home}/${ZITI_ROUTER_IDENTITY_CERT}" || "${1:-}" == --force ]]; then
     if [[ -n "${ZITI_ENROLL_TOKEN:-}" && ! -f "${ZITI_ENROLL_TOKEN}" ]]; then
       # shellcheck disable=SC2188
       ziti router enroll "${_config_file}" \
@@ -421,7 +423,6 @@ trap exitHandler EXIT SIGINT SIGTERM
 : "${ZITI_ROUTER_MODE:=host}"  # router will panic if not tunneler-enabled in controller
 : "${ZITI_ROUTER_TPROXY_RESOLVER:=udp://127.0.0.1:53}"  # where to listen for DNS requests in tproxy mode
 : "${ZITI_ROUTER_DNS_IP_RANGE:=100.64.0.1/10}"  # CIDR range of IP addresses to assign to DNS clients in tproxy mode
-: "${ZITI_HOME:=${PWD}}"
 ZITI_BOOTSTRAP_NOW="$(date --utc --iso-8601=seconds)"
 
 # run the bootstrap function if this script is executed directly
