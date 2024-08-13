@@ -14,6 +14,141 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build-linux-packages:
+    name: ${{ matrix.package_name }} ${{ matrix.arch.gox }} ${{ matrix.packager }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package_name:
+          - openziti
+          - openziti-controller
+          - openziti-router
+        arch:
+          - goreleaser: amd64
+            gox: amd64
+            deb: amd64
+            rpm: x86_64
+        packager:
+          - rpm
+          - deb
+    steps:
+      - name: Shallow checkout
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        id: setup-go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./go.mod
+
+      - name: Build ziti executable
+        shell: bash
+        run: |
+          mkdir -pv ${GITHUB_WORKSPACE}/release/
+          go build -o ${GITHUB_WORKSPACE}/release/ ${GITHUB_WORKSPACE}/...
+
+      - name: Build Package
+        id: nfpm
+        uses: burningalchemist/action-gh-nfpm@v1
+        # uses: netfoundry/action-gh-nfpm@main
+        with:
+          nfpm_version: "2.32.0"
+          packager: ${{ matrix.packager }}
+          config: dist/dist-packages/linux/nfpm-${{ matrix.package_name }}.yaml
+          target: release/
+
+      - name: Upload Package to Build Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package_name }}-${{ matrix.arch.gox }}-${{ matrix.packager }}
+          path: ./release/${{ matrix.package_name }}*.${{ matrix.packager }}
+          if-no-files-found: error
+
+  install-linux-packages:
+    name: ${{ format('{0}:{1}', matrix.distro.name, matrix.distro.version) }} ${{ matrix.arch.gox }}
+    runs-on: ubuntu-latest
+    container: ${{ format('{0}:{1}', matrix.distro.name, matrix.distro.version) }} 
+    strategy:
+      matrix:
+        distro:
+          - name: ubuntu
+            version: "24.04"
+            org:
+            type: deb
+          - name: ubuntu
+            version: "22.04"
+            type: deb
+          - name: ubuntu
+            version: "20.04"
+            type: deb
+          - name: fedora
+            version: "35"
+            type: rpm
+          - name: rockylinux
+            version: "9"
+            type: rpm
+        arch:
+          - goreleaser: amd64
+            gox: amd64
+            deb: amd64
+            rpm: x86_64
+    env:
+      ZITI_PWD: ziggylicious
+      ZITI_CTRL_ADVERTISED_ADDRESS: linux-controller.127.21.71.0.sslip.io
+      ZITI_ROUTER_ADVERTISED_ADDRESS: linux-router.127.21.71.0.sslip.io
+      # ZITI_ROUTER_NAME: linux-router
+
+    steps:
+      - name: Download Linux Release Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-${{ matrix.arch.gox }}-${{ matrix.distro.type }}"
+          path: release/
+
+      - name: Install Package
+        shell: bash
+        run: |
+          case "${{ matrix.packager }}" in
+            rpm)
+              sudo yum install -y ./release/${{ matrix.package_name }}*.${{ matrix.packager }}
+              ;;
+            deb)
+              sudo apt install -y ./release/${{ matrix.package_name }}*.${{ matrix.packager }}
+              ;;
+          esac
+
+      - name: Run the controller
+        shell: bash
+        run: docker compose up ziti-login --detach
+
+      - name: Get router token
+        id: router-token
+        shell: bash
+        run: |
+          docker compose run --rm --entrypoint=/bin/bash --env ZITI_ROUTER_NAME="${ZITI_ROUTER_NAME}" ziti-login -euxc 'ziti edge create edge-router "${ZITI_ROUTER_NAME}" -to ~ziggy/.config/ziti/"${ZITI_ROUTER_NAME}.jwt"'
+
+      - name: Run the Router
+        shell: bash
+        run: docker compose up ziti-router --detach
+        env:
+          ZITI_ENROLL_TOKEN: /home/ziggy/.config/ziti/${{ env.ZITI_ROUTER_NAME }}.jwt
+
+      - name: Run quickstart manual test suite
+        shell: bash
+        run: docker compose run --rm quickstart-test
+        env:
+          ZITI_GO_VERSION: ${{ steps.setup-go.outputs.go-version }}
+
+      - name: Print debug info
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          set -x
+          id runner
+          docker compose --profile test logs
+          ls -lAn ${GOCACHE:-${HOME}/.cache/go-build}/ ${GOPATH:-${HOME}/go}/pkg/mod/
+
   docker-deployments:
     name: Test the Docker Deployments
     runs-on: ubuntu-latest
