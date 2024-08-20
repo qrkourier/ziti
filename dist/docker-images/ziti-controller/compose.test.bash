@@ -35,8 +35,7 @@ ZITI_ROUTER_NAME="router1"
 export ZITI_ROUTER_ADVERTISED_ADDRESS="${ZITI_ROUTER_NAME}.127.21.71.0.sslip.io" \
 ZITI_ENROLL_TOKEN="/home/ziggy/.config/ziti/${ZITI_ROUTER_NAME}.jwt"
 
-rm -r ./release
-mkdir -pv ./release/amd64/linux
+mkdir -p ./release/amd64/linux
 go build -o ./release/amd64/linux ./...
 
 docker buildx build \
