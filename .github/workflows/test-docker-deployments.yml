@@ -19,14 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ZIGGY_UID: 1001  # let container EUID run-as GHA "runner" user to share cache, etc.
-      ZITI_PWD: ziggylicious
-      ZITI_CTRL_ADVERTISED_ADDRESS: ctrl1.127.21.71.0.sslip.io
-      ZITI_ROUTER_ADVERTISED_ADDRESS: router1.127.21.71.0.sslip.io
-      ZITI_ROUTER_NAME: router1
-      # define the compose project files: compose.yml and compose.test.yml files for ziti-controller and ziti-router
-      COMPOSE_FILE: ${{ github.workspace }}/dist/docker-images/ziti-controller/compose.yml:${{ github.workspace }}/dist/docker-images/ziti-controller/compose.test.yml:${{ github.workspace }}/dist/docker-images/ziti-router/compose.yml:${{ github.workspace }}/dist/docker-images/ziti-router/compose.test.yml
-      ZITI_CONTROLLER_IMAGE: ziti-controller:local
-      ZITI_ROUTER_IMAGE: ziti-router:local
     steps:
       - name: Shallow checkout
         uses: actions/checkout@v4
@@ -37,75 +29,8 @@ jobs:
         with:
           go-version-file: ./go.mod
 
-      - name: Build ziti executable
+      - name: Run the Compose Test Script
         shell: bash
-        run: |
-          mkdir -pv ${GITHUB_WORKSPACE}/release/amd64/linux
-          go build -o ${GITHUB_WORKSPACE}/release/amd64/linux ${GITHUB_WORKSPACE}/...
-
-      - name: Build & Load CLI Image
-        uses: docker/build-push-action@v6
-        with:
-          # builder: ${{ steps.buildx.outputs.name }}
-          context: ${{ github.workspace }}/
-          file: ${{ github.workspace }}/dist/docker-images/ziti-cli/Dockerfile
-          tags: ziti-cli:local
-          build-args: |
-            DOCKER_BUILD_DIR=./dist/docker-images/ziti-cli
-          load: true
-
-      - name: Build & Load Controller Image
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ github.workspace }}/
-          file: ${{ github.workspace }}/dist/docker-images/ziti-controller/Dockerfile
-          tags: ziti-controller:local
-          build-args: |
-            ZITI_CLI_TAG=local
-            ZITI_CLI_IMAGE=ziti-cli
-            DOCKER_BUILD_DIR=./dist/docker-images/ziti-controller
-          load: true
-
-      - name: Build & Load Router Image
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ github.workspace }}/
-          file: ${{ github.workspace }}/dist/docker-images/ziti-router/Dockerfile
-          tags: ziti-router:local
-          build-args: |
-            ZITI_CLI_TAG=local
-            ZITI_CLI_IMAGE=ziti-cli
-            DOCKER_BUILD_DIR=./dist/docker-images/ziti-router
-          load: true
-
-      - name: Run the controller
-        shell: bash
-        run: docker compose up ziti-login --detach
-
-      - name: Get router token
-        id: router-token
-        shell: bash
-        run: |
-          docker compose run --rm --entrypoint=/bin/bash --env ZITI_ROUTER_NAME="${ZITI_ROUTER_NAME}" ziti-login -euxc 'ziti edge create edge-router "${ZITI_ROUTER_NAME}" -to ~ziggy/.config/ziti/"${ZITI_ROUTER_NAME}.jwt"'
-
-      - name: Run the Router
-        shell: bash
-        run: docker compose up ziti-router --detach
-        env:
-          ZITI_ENROLL_TOKEN: /home/ziggy/.config/ziti/${{ env.ZITI_ROUTER_NAME }}.jwt
-
-      - name: Run quickstart manual test suite
-        shell: bash
-        run: docker compose run --rm quickstart-test
+        run: dist/docker-images/ziti-controller/compose.test.bash
         env:
           ZITI_GO_VERSION: ${{ steps.setup-go.outputs.go-version }}
-
-      - name: Print debug info
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          set -x
-          id runner
-          docker compose --profile test logs
-          ls -lAn ${GOCACHE:-${HOME}/.cache/go-build}/ ${GOPATH:-${HOME}/go}/pkg/mod/
