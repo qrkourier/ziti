@@ -199,16 +199,16 @@ jobs:
           sudo systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-controller.service
 
           _login_cmd="ziti edge login ${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"\
-          "--ca /var/lib/private/ziti-controller/pki/root/certs/root.cert"\
-          "--username admin"\
-          "--password ${ZITI_PWD}"
+          " --ca /var/lib/private/ziti-controller/pki/root/certs/root.cert"\
+          " --username admin"\
+          " --password ${ZITI_PWD}"
           ATTEMPTS=10
           DELAY=3
           until !((ATTEMPTS)) || _login_cmd
           do
             (( ATTEMPTS-- ))
             echo "Waiting for controller login"
-            sleep $${DELAY}
+            sleep ${DELAY}
           done
           ziti edge create edge-router ${ZITI_ROUTER_NAME} -to ${ZITI_ENROLL_TOKEN}
 
