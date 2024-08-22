@@ -204,7 +204,7 @@ jobs:
           " --password ${ZITI_PWD}"
           ATTEMPTS=10
           DELAY=3
-          until !((ATTEMPTS)) || _login_cmd
+          until !((ATTEMPTS)) || ${_login_cmd}
           do
             (( ATTEMPTS-- ))
             echo "Waiting for controller login"
