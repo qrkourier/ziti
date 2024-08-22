@@ -164,7 +164,7 @@ jobs:
           EOF
 
   run-linux-services:
-    needs: install-linux-packages
+    needs: dry-run-linux-packages
     name: Run Linux Services
     runs-on: ubuntu-latest
     steps:
@@ -183,7 +183,7 @@ jobs:
           sudo dpkg --install ./release/openziti_*.deb  # install CLI
           sudo dpkg --install ./release/openziti-*.deb  # install controller, router
 
-      - name: Bootstrapping - Wet Run
+      - name: Bootstrap & Run
         shell: bash
         env:
           ZITI_ENROLL_TOKEN: /tmp/${{ env.ZITI_ROUTER_NAME }}.jwt
