@@ -125,7 +125,7 @@ jobs:
           ls -lR ./release/
           case "${{ matrix.distro.type }}" in
             rpm)
-              dnf update --assumeno
+              dnf makecache --refresh
               dnf install --yes systemd                                         # install as dep, but impotent because not PID 1
               dnf install --yes ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
               dnf install --yes ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
