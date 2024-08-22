@@ -144,22 +144,22 @@ jobs:
           DEBUG: 1
         run: |
           set -x
-          /opt/openziti/etc/controller/bootstrap.bash << EOF
+          /opt/openziti/etc/controller/bootstrap.bash <<CTRL
           ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
           ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
           ZITI_USER=admin
           ZITI_PWD=${ZITI_PWD}
           ZITI_ARGS="--verbose"
-          EOF
+          CTRL
 
-          /opt/openziti/etc/router/bootstrap.bash << EOF
+          /opt/openziti/etc/router/bootstrap.bash <<ROUTER
           ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
           ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
           ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
           ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}
           ZITI_BOOTSTRAP_ENROLLMENT=false
           ZITI_ARGS="--verbose"
-          EOF
+          ROUTER
 
   run-linux-services:
     needs: dry-run-linux-packages
@@ -238,6 +238,9 @@ jobs:
             echo "Router is offline"
             exit 1
           fi
+
+      - name: Shallow checkout
+        uses: actions/checkout@v4
 
       - name: Install Go
         id: setup-go
