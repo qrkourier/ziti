@@ -199,7 +199,7 @@ jobs:
           sudo systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-controller.service
 
           _login_cmd="ziti edge login ${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"\
-          " --ca /var/lib/private/ziti-controller/pki/root/certs/root.cert"\
+          " --yes"\
           " --username admin"\
           " --password ${ZITI_PWD}"
           ATTEMPTS=10
