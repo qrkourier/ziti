@@ -222,16 +222,15 @@ jobs:
           sudo systemctl start ziti-router.service
           sudo systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-router.service
 
-          _router_online_cmd="ziti edge list edge-routers -j | jq '.data[0].isOnline'"
           ATTEMPTS=10
           DELAY=3
-          until !((ATTEMPTS)) || [[ $(${_router_online_cmd}) == "true" ]]
+          until !((ATTEMPTS)) || [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline'") == "true" ]]
           do
             (( ATTEMPTS-- ))
             echo "Waiting for router to be online"
             sleep ${DELAY}
           done
-          if [[ $(${_router_online_cmd}) == "true" ]]
+          if [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline'") == "true" ]]
           then
             echo "Router is online"
             exit 0
