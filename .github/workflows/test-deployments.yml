@@ -13,6 +13,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
+env:
+  ZITI_PWD: ziggypw
+  ZITI_CTRL_ADVERTISED_ADDRESS: linux-controller.127.21.71.0.sslip.io
+  ZITI_CTRL_ADVERTISED_PORT: 12800
+  ZITI_ROUTER_ADVERTISED_ADDRESS: linux-router.127.21.71.0.sslip.io
+  ZITI_ROUTER_PORT: 30222
+  ZITI_ROUTER_NAME: linux-router
+
 jobs:
   build-linux-packages:
     name: ${{ matrix.package_name }} ${{ matrix.arch.gox }} ${{ matrix.packager }}
@@ -102,14 +110,6 @@ jobs:
             gox: amd64
             deb: amd64
             rpm: x86_64
-    env:
-      ZITI_PWD: ziggypw
-      ZITI_CTRL_ADVERTISED_ADDRESS: linux-controller.127.21.71.0.sslip.io
-      ZITI_CTRL_ADVERTISED_PORT: 12800
-      ZITI_ROUTER_ADVERTISED_ADDRESS: linux-router.127.21.71.0.sslip.io
-      ZITI_ROUTER_PORT: 30222
-      # ZITI_ROUTER_NAME: linux-router
-
     steps:
       - name: Download Linux Release Artifacts
         uses: actions/download-artifact@v4
@@ -118,7 +118,7 @@ jobs:
           merge-multiple: true
           path: release/
 
-      - name: Install Package
+      - name: Install Packages
         shell: bash
         run: |
           set -x
@@ -137,6 +137,60 @@ jobs:
               dpkg --install ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
               ;;
           esac
+
+      - name: Test Bootstrapping
+        shell: bash
+        env:
+          ZITI_ENROLL_TOKEN: fakejwt
+          ZITI_BOOTSTRAP_ENROLLMENT: false
+        run: |
+          set -x
+          /opt/openziti/etc/controller/bootstrap.bash
+          /opt/openziti/etc/router/bootstrap.bash
+
+  run-linux-services:
+    needs: install-linux-packages
+    name: Run Linux Services
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux Release Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-amd64-deb"
+          merge-multiple: true
+          path: release/
+
+      - name: Install Packages
+        shell: bash
+        run: |
+          set -x
+          ls -lR ./release/
+          dpkg --install ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
+          dpkg --install ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
+
+      - name: Bootstrap and Run
+        shell: bash
+        env:
+          ZITI_ENROLL_TOKEN: /tmp/${{ env.ZITI_ROUTER_NAME }}.jwt
+          DEBUG: 1
+        run: |
+          set -x
+          sudo /opt/openziti/etc/controller/bootstrap.bash
+          sudo systemctl start ziti-controller.service
+
+          ziti edge login --ca /var/lib/private/ziti-controller/pki/root/certs/root.cert --username admin --password ${ZITI_PWD}
+          ziti edge create edge-router ${ZITI_ROUTER_NAME} -to ${ZITI_ENROLL_TOKEN}
+
+          sudo /opt/openziti/etc/router/bootstrap.bash
+          sudo systemctl start ziti-router.service
+      
+      - name: Debug Info
+        if: always()
+        shell: bash
+        run: |
+          set -x
+          sudo journalctl --no-pager -o cat -u ziti-controller.service
+          sudo journalctl --no-pager -o cat -u ziti-router.service
 
   docker-deployments:
     name: Test the Docker Deployments
