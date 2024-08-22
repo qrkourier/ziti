@@ -224,13 +224,13 @@ jobs:
 
           ATTEMPTS=10
           DELAY=3
-          until !((ATTEMPTS)) || [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline'") == "true" ]]
+          until !((ATTEMPTS)) || [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline') == "true" ]]
           do
             (( ATTEMPTS-- ))
             echo "Waiting for router to be online"
             sleep ${DELAY}
           done
-          if [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline'") == "true" ]]
+          if [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline') == "true" ]]
           then
             echo "Router is online"
             exit 0
