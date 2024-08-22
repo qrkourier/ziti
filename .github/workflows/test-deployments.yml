@@ -149,6 +149,7 @@ jobs:
           ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
           ZITI_USER=admin
           ZITI_PWD=${ZITI_PWD}
+          ZITI_ARGS="--verbose"
           EOF
 
           /opt/openziti/etc/router/bootstrap.bash << EOF
@@ -157,6 +158,7 @@ jobs:
           ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
           ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}
           ZITI_BOOTSTRAP_ENROLLMENT=false
+          ZITI_ARGS="--verbose"
           EOF
 
   run-linux-services:
@@ -196,10 +198,18 @@ jobs:
           sudo systemctl start ziti-controller.service
           sudo systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-controller.service
 
-          ziti edge login ${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT} \
-          --ca /var/lib/private/ziti-controller/pki/root/certs/root.cert \
-          --username admin \
-          --password ${ZITI_PWD}
+          _login_cmd="ziti edge login ${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"\
+          "--ca /var/lib/private/ziti-controller/pki/root/certs/root.cert"\
+          "--username admin"\
+          "--password ${ZITI_PWD}"
+          ATTEMPTS=10
+          DELAY=3
+          until !((ATTEMPTS)) || _login_cmd
+          do
+            (( ATTEMPTS-- ))
+            echo "Waiting for controller login"
+            sleep $${DELAY}
+          done
           ziti edge create edge-router ${ZITI_ROUTER_NAME} -to ${ZITI_ENROLL_TOKEN}
 
           sudo /opt/openziti/etc/router/bootstrap.bash << EOF
@@ -226,6 +236,7 @@ jobs:
         shell: bash
         run: |
           set -x
+          sudo ss -lntp | grep -E ":(${ZITI_CTRL_ADVERTISED_PORT}|${ZITI_ROUTER_PORT})"
           sudo journalctl --no-pager -o cat -u ziti-controller.service
           sudo journalctl --no-pager -o cat -u ziti-router.service
 
