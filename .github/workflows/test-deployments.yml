@@ -64,6 +64,7 @@ jobs:
           if-no-files-found: error
 
   install-linux-packages:
+    needs: build-linux-packages
     name: ${{ format('{0}:{1}', matrix.distro.name, matrix.distro.version) }} ${{ matrix.arch.gox }}
     runs-on: ubuntu-latest
     # iterate over an assortment of popular distribution images from the docker.io/library of vetted images
