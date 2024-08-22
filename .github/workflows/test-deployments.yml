@@ -148,14 +148,14 @@ jobs:
           DEBUG: 1
         run: |
           set -x
-          /opt/openziti/etc/controller/bootstrap.bash <<\EOF
+          /opt/openziti/etc/controller/bootstrap.bash << EOF
           ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
           ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
           ZITI_USER=admin
           ZITI_PWD=${ZITI_PWD}
           EOF
 
-          /opt/openziti/etc/router/bootstrap.bash <<\EOF
+          /opt/openziti/etc/router/bootstrap.bash << EOF
           ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
           ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
           ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
@@ -191,7 +191,7 @@ jobs:
         run: |
           set -x
 
-          sudo /opt/openziti/etc/controller/bootstrap.bash <<\EOF
+          sudo /opt/openziti/etc/controller/bootstrap.bash << EOF
           ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
           ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
           ZITI_USER=admin
@@ -206,7 +206,7 @@ jobs:
           --password ${ZITI_PWD}
           ziti edge create edge-router ${ZITI_ROUTER_NAME} -to ${ZITI_ENROLL_TOKEN}
 
-          sudo /opt/openziti/etc/router/bootstrap.bash <<\EOF
+          sudo /opt/openziti/etc/router/bootstrap.bash << EOF
           ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
           ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
           ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
