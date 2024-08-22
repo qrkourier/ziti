@@ -20,6 +20,7 @@ env:
   ZITI_ROUTER_ADVERTISED_ADDRESS: linux-router.127.21.71.0.sslip.io
   ZITI_ROUTER_PORT: 30222
   ZITI_ROUTER_NAME: linux-router
+  NFPM_VERSION: "2.30.0"
 
 jobs:
   build-linux-packages:
@@ -59,7 +60,7 @@ jobs:
         id: nfpm
         uses: burningalchemist/action-gh-nfpm@eeac96f42da23d091eec0d0088bf05cac0ceb9f3
         with:
-          nfpm_version: "2.38.0"
+          nfpm_version: ${{ env.NFPM_VERSION }}
           packager: ${{ matrix.packager }}
           config: dist/dist-packages/linux/nfpm-${{ matrix.package_name }}.yaml
           target: release/
@@ -166,79 +167,6 @@ jobs:
     name: Run Linux Services
     runs-on: ubuntu-latest
     steps:
-      - name: Download Linux Release Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: "*-amd64-deb"
-          merge-multiple: true
-          path: release/
-
-      - name: Install Packages
-        shell: bash
-        run: |
-          set -x
-          ls -lR ./release/
-          sudo dpkg --install ./release/openziti_*.deb  # install CLI
-          sudo dpkg --install ./release/openziti-*.deb  # install controller, router
-
-      - name: Bootstrap & Run
-        shell: bash
-        env:
-          ZITI_ENROLL_TOKEN: /tmp/${{ env.ZITI_ROUTER_NAME }}.jwt
-          DEBUG: 1
-        run: |
-          set -x
-
-          sudo /opt/openziti/etc/controller/bootstrap.bash << EOF
-          ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
-          ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
-          ZITI_USER=admin
-          ZITI_PWD=${ZITI_PWD}
-          EOF
-          sudo systemctl start ziti-controller.service
-          sudo systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-controller.service
-
-          _login_cmd="ziti edge login ${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"\
-          " --yes"\
-          " --username admin"\
-          " --password ${ZITI_PWD}"
-          ATTEMPTS=10
-          DELAY=3
-          until !((ATTEMPTS)) || ${_login_cmd}
-          do
-            (( ATTEMPTS-- ))
-            echo "Waiting for controller login"
-            sleep ${DELAY}
-          done
-          ziti edge create edge-router ${ZITI_ROUTER_NAME} -to ${ZITI_ENROLL_TOKEN}
-
-          sudo /opt/openziti/etc/router/bootstrap.bash << EOF
-          ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
-          ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
-          ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
-          ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}
-          ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}
-          EOF
-          sudo systemctl start ziti-router.service
-          sudo systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-router.service
-
-          ATTEMPTS=10
-          DELAY=3
-          until !((ATTEMPTS)) || [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline') == "true" ]]
-          do
-            (( ATTEMPTS-- ))
-            echo "Waiting for router to be online"
-            sleep ${DELAY}
-          done
-          if [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline') == "true" ]]
-          then
-            echo "Router is online"
-            exit 0
-          else
-            echo "Router is offline"
-            exit 1
-          fi
-
       - name: Shallow checkout
         uses: actions/checkout@v4
 
@@ -248,12 +176,16 @@ jobs:
         with:
           go-version-file: ./go.mod
 
-      - name: Go Test Quickstart Manual
+      - name: Install nfpm
         shell: bash
         run: |
-          ZITI_CTRL_EDGE_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS} \
-          ZITI_CTRL_EDGE_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT} \
-          go test -v -count=1 -tags="quickstart manual" ./ziti/cmd/edge/...
+          echo "${{ github.action_path }}" >> $GITHUB_PATH
+          wget -qO- https://github.com/goreleaser/nfpm/releases/download/v${{ env.NFPM_VERSION }}/nfpm_${{ env.NFPM_VERSION }}_Linux_x86_64.tar.gz | tar --directory ${{ github.action_path }} -xz nfpm
+          nfpm --version
+
+      - name: Bootstrap & Run
+        shell: bash
+        run: ./dist/dist-packages/linux/linux.test.bash
 
       - name: Debug Info
         if: always()
@@ -263,6 +195,7 @@ jobs:
           sudo ss -lntp | grep -E ":(${ZITI_CTRL_ADVERTISED_PORT}|${ZITI_ROUTER_PORT})"
           sudo journalctl --no-pager -o cat -u ziti-controller.service
           sudo journalctl --no-pager -o cat -u ziti-router.service
+          cat /opt/openziti/etc/**/*.env /tmp/${ZITI_ROUTER_NAME}.jwt
 
   docker-deployments:
     name: Test the Docker Deployments
