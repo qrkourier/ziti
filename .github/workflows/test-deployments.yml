@@ -23,7 +23,7 @@ env:
 
 jobs:
   build-linux-packages:
-    name: ${{ matrix.package_name }} ${{ matrix.arch.gox }} ${{ matrix.packager }}
+    name: Build ${{ matrix.package_name }} ${{ matrix.arch.gox }} ${{ matrix.packager }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -82,9 +82,9 @@ jobs:
           path: ./release/${{ matrix.package_name }}*.${{ matrix.packager }}
           if-no-files-found: error
 
-  install-linux-packages:
+  dry-run-linux-packages:
     needs: build-linux-packages
-    name: ${{ format('{0}:{1}', matrix.distro.name, matrix.distro.version) }} ${{ matrix.arch.gox }}
+    name: Dry Run ${{ format('{0}:{1}', matrix.distro.name, matrix.distro.version) }} ${{ matrix.arch.gox }}
     runs-on: ubuntu-latest
     # iterate over an assortment of popular distribution images from the docker.io/library of vetted images
     container:
@@ -198,7 +198,7 @@ jobs:
           ZITI_PWD=${ZITI_PWD}
           EOF
           sudo systemctl start ziti-controller.service
-          systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-controller.service
+          sudo systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-controller.service
 
           ziti edge login \
           --ca /var/lib/private/ziti-controller/pki/root/certs/root.cert \
@@ -214,7 +214,7 @@ jobs:
           ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}
           EOF
           sudo systemctl start ziti-router.service
-          systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-router.service
+          sudo systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-router.service
 
           if [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline') == "true" ]]
           then
