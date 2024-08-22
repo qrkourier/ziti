@@ -106,18 +106,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: "*-${{ matrix.arch.gox }}-${{ matrix.distro.type }}"
+          merge-multiple: true
           path: release/
 
       - name: Install Package
         shell: bash
         run: |
           set -x
-          case "${{ matrix.packager }}" in
+          ls -lR ./release/
+          case "${{ matrix.distro.type }}" in
             rpm)
-              sudo yum install -y ./release/${{ matrix.package_name }}*.${{ matrix.packager }}
+              sudo yum install -y ./release/*.${{ matrix.distro.type }}
               ;;
             deb)
-              sudo apt install -y ./release/${{ matrix.package_name }}*.${{ matrix.packager }}
+              sudo apt install -y ./release/*.${{ matrix.distro.type }}
               ;;
           esac
 
