@@ -180,8 +180,8 @@ jobs:
         run: |
           set -x
           ls -lR ./release/
-          sudo dpkg --install ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
-          sudo dpkg --install ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
+          sudo dpkg --install ./release/openziti_*.deb  # install CLI
+          sudo dpkg --install ./release/openziti-*.deb  # install controller, router
 
       - name: Bootstrapping - Wet Run
         shell: bash
