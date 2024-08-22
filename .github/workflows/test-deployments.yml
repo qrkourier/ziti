@@ -36,6 +36,10 @@ jobs:
             gox: amd64
             deb: amd64
             rpm: x86_64
+          - goreleaser: arm64
+            gox: arm64
+            deb: arm64
+            rpm: aarch64
         packager:
           - rpm
           - deb
@@ -138,15 +142,26 @@ jobs:
               ;;
           esac
 
-      - name: Test Bootstrapping
+      - name: Bootstrapping - Dry Run
         shell: bash
         env:
-          ZITI_ENROLL_TOKEN: fakejwt
-          ZITI_BOOTSTRAP_ENROLLMENT: false
+          DEBUG: 1
         run: |
           set -x
-          /opt/openziti/etc/controller/bootstrap.bash
-          /opt/openziti/etc/router/bootstrap.bash
+          /opt/openziti/etc/controller/bootstrap.bash <<\EOF
+          ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
+          ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
+          ZITI_USER=admin
+          ZITI_PWD=${ZITI_PWD}
+          EOF
+
+          /opt/openziti/etc/router/bootstrap.bash <<\EOF
+          ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
+          ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
+          ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
+          ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}
+          ZITI_BOOTSTRAP_ENROLLMENT=false
+          EOF
 
   run-linux-services:
     needs: install-linux-packages
@@ -168,22 +183,48 @@ jobs:
           dpkg --install ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
           dpkg --install ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
 
-      - name: Bootstrap and Run
+      - name: Bootstrapping - Wet Run
         shell: bash
         env:
           ZITI_ENROLL_TOKEN: /tmp/${{ env.ZITI_ROUTER_NAME }}.jwt
           DEBUG: 1
         run: |
           set -x
-          sudo /opt/openziti/etc/controller/bootstrap.bash
-          sudo systemctl start ziti-controller.service
 
-          ziti edge login --ca /var/lib/private/ziti-controller/pki/root/certs/root.cert --username admin --password ${ZITI_PWD}
+          sudo /opt/openziti/etc/controller/bootstrap.bash <<\EOF
+          ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
+          ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
+          ZITI_USER=admin
+          ZITI_PWD=${ZITI_PWD}
+          EOF
+          sudo systemctl start ziti-controller.service
+          systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-controller.service
+
+          ziti edge login \
+          --ca /var/lib/private/ziti-controller/pki/root/certs/root.cert \
+          --username admin \
+          --password ${ZITI_PWD}
           ziti edge create edge-router ${ZITI_ROUTER_NAME} -to ${ZITI_ENROLL_TOKEN}
 
-          sudo /opt/openziti/etc/router/bootstrap.bash
+          sudo /opt/openziti/etc/router/bootstrap.bash <<\EOF
+          ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
+          ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
+          ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
+          ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}
+          ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}
+          EOF
           sudo systemctl start ziti-router.service
-      
+          systemd-run --wait --quiet --service-type=oneshot --property=TimeoutStartSec=20s systemctl is-active ziti-router.service
+
+          if [[ $(ziti edge list edge-routers -j | jq '.data[0].isOnline') == "true" ]]
+          then
+            echo "Router is online"
+            exit 0
+          else
+            echo "Router is offline"
+            exit 1
+          fi
+
       - name: Debug Info
         if: always()
         shell: bash
