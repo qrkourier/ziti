@@ -55,6 +55,13 @@ jobs:
           packager: ${{ matrix.packager }}
           config: dist/dist-packages/linux/nfpm-${{ matrix.package_name }}.yaml
           target: release/
+        env:
+          ZITI_VERSION: 0.0.0
+          ZITI_MAINTAINER: "OpenZiti Maintainers <developers@openziti.org>"
+          ZITI_HOMEPAGE: "https://openziti.io"
+          ZITI_VENDOR: "NetFoundry, Inc."
+          GOARCH: ${{ matrix.arch.goreleaser }}
+          MINIMUM_SYSTEMD_VERSION: 232
 
       - name: Upload Package to Build Summary
         uses: actions/upload-artifact@v4
@@ -118,12 +125,14 @@ jobs:
           ls -lR ./release/
           case "${{ matrix.distro.type }}" in
             rpm)
-              dnf install -y ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
-              dnf install -y ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
+              dnf install --yes systemd                                         # install as dep, but impotent because not PID 1
+              dnf install --yes ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
+              dnf install --yes ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
               ;;
             deb)
-              dpkg -i ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
-              dpkg -i ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
+              apt-get install --yes systemd                                  # install as dep, but impotent because not PID 1
+              dpkg --install ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
+              dpkg --install ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
               ;;
           esac
 
