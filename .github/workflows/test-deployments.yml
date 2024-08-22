@@ -126,9 +126,9 @@ jobs:
           case "${{ matrix.distro.type }}" in
             rpm)
               dnf makecache --refresh
-              dnf install -y systemd                                         # install as impotent dep (not PID 1)
-              dnf install -y ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
-              dnf install -y ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
+              dnf install -y systemd                                                          # install as impotent dep (not PID 1)
+              dnf install -y ./release/openziti-${ZITI_VERSION}*.${{ matrix.distro.type }}    # install CLI
+              dnf install -y ./release/openziti-*-${ZITI_VERSION}*.${{ matrix.distro.type }}  # install controller, router
               ;;
             deb)
               apt-get update
