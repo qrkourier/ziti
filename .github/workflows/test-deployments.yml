@@ -118,10 +118,12 @@ jobs:
           ls -lR ./release/
           case "${{ matrix.distro.type }}" in
             rpm)
-              yum install -y ./release/*.${{ matrix.distro.type }}
+              dnf install -y ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
+              dnf install -y ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
               ;;
             deb)
-              apt install -y ./release/*.${{ matrix.distro.type }}
+              dpki -i ./release/openziti_*.${{ matrix.distro.type }}  # install CLI
+              dpki -i ./release/openziti-*.${{ matrix.distro.type }}  # install controller, router
               ;;
           esac
 
