@@ -20,7 +20,7 @@ env:
   ZITI_ROUTER_ADVERTISED_ADDRESS: linux-router.127.21.71.0.sslip.io
   ZITI_ROUTER_PORT: 30222
   ZITI_ROUTER_NAME: linux-router
-  NFPM_VERSION: "2.30.0"
+  NFPM_VERSION: "2.38.0"
 
 jobs:
   build-linux-packages:
