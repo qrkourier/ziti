@@ -162,9 +162,9 @@ jobs:
           ZITI_ARGS="--verbose"
           ROUTER
 
-  run-linux-services:
+  test-linux-services:
     needs: dry-run-linux-packages
-    name: Run Linux Services
+    name: Test Linux Services
     runs-on: ubuntu-latest
     steps:
       - name: Shallow checkout
