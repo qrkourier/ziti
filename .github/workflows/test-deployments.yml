@@ -179,8 +179,9 @@ jobs:
       - name: Install nfpm
         shell: bash
         run: |
-          echo "${{ github.action_path }}" >> $GITHUB_PATH
-          wget -qO- https://github.com/goreleaser/nfpm/releases/download/v${{ env.NFPM_VERSION }}/nfpm_${{ env.NFPM_VERSION }}_Linux_x86_64.tar.gz | tar --directory ${{ github.action_path }} -xz nfpm
+          echo ~/.local/bin >> $GITHUB_PATH
+          mkdir -p ~/.local/bin
+          wget -qO- https://github.com/goreleaser/nfpm/releases/download/v${{ env.NFPM_VERSION }}/nfpm_${{ env.NFPM_VERSION }}_Linux_x86_64.tar.gz | tar --directory ~/.local/bin -xz nfpm
           nfpm --version
 
       - name: Bootstrap & Run
