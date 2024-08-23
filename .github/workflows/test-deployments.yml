@@ -21,6 +21,7 @@ env:
   ZITI_ROUTER_PORT: 30222
   ZITI_ROUTER_NAME: linux-router
   NFPM_VERSION: "2.38.0"
+  I_AM_ROBOT: 1
 
 jobs:
   build-linux-packages:

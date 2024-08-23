@@ -24,11 +24,13 @@ cleanup(){
     done
     for ETC in router controller
     do
-        sudo apt-get remove --yes --purge "openziti-${ETC}"
-        if [[ -d /opt/openziti/etc/${ETC} ]]
-        then
-            sudo rm -r "/opt/openziti/etc/${ETC}"
-        fi
+        (set +e
+            sudo apt-get remove --yes --purge "openziti-${ETC}"
+            if [[ -d /opt/openziti/etc/${ETC} ]]
+            then
+                sudo rm -r "/opt/openziti/etc/${ETC}"
+            fi
+        )
     done
 }
 
