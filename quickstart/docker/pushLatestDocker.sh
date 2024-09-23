@@ -2,6 +2,7 @@
 set -eo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+: "${ZITI_QUICKSTART_IMAGE:-openziti/quickstart}"
 
 if [ -z "${ZITI_VERSION}" ]; then
   DOCKER_IMAGE_ROOT="$(realpath ${SCRIPT_DIR}/image)"
@@ -36,6 +37,6 @@ docker buildx create \
 
 eval docker buildx build "${_BUILDX_PLATFORM}" "${SCRIPT_DIR}/image" \
   --build-arg ZITI_VERSION_OVERRIDE="v${ZITI_VERSION}" \
-  --tag "openziti/quickstart:${ZITI_VERSION}" \
-  --tag "openziti/quickstart:${IMAGE_TAG}" \
+  --tag "${ZITI_QUICKSTART_IMAGE}:${ZITI_VERSION}" \
+  --tag "${ZITI_QUICKSTART_IMAGE}:${IMAGE_TAG}" \
   "${_BUILDX_ACTION}"

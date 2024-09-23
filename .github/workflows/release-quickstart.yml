@@ -12,14 +12,15 @@ on:
 jobs:
   release-quickstart:
     name: Release Quickstart Job
-    # this is only run on the official upstream repo when a PR is merged to the default branch "main" or a release tag
-    # is pushed; merges to main trigger a quickstart release with a commit SHA suffix featuring the previous ziti binary
-    # release version, whereas release tag pushes trigger a quickstart release with the same tag name and the same ziti
-    # binary release version
-    if: github.repository_owner == 'openziti' 
-      && (
-        startsWith(github.ref_name, 'v')
-        || (
+    # this is only run on the official upstream repo when a PR is merged to the
+    # default branch "main" or a release tag is pushed or for the same
+    # conditions in a repo fork that overrides the container image repo to push
+    # to; merges to main trigger a quickstart release with a commit SHA suffix
+    # featuring the previous ziti binary release version, whereas release tag
+    # pushes trigger a quickstart release with the same tag name and the same
+    # ziti binary release version
+    if: (github.repository_owner == 'openziti' || github.vars.ZITI_QUICKSTART_IMAGE != '') && (
+        startsWith(github.ref_name, 'v') || (
           github.event.pull_request.merged == true 
           && contains(github.event.pull_request.labels.*.name, 'quickstartrelease')
         )
