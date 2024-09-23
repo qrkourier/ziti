@@ -116,7 +116,8 @@ jobs:
           # (container image tag) does not have a leading 'v' and the
           # ZITI_VERSION_OVERRIDE (GitHub tag ref) does have a leading 'v'
 
-          echo QUICKSTART_VERSION="${QUICKSTART_VERSION#v}" | tee -a $GITHUB_OUTPUT
+          QUICKSTART_VERSION="${QUICKSTART_VERSION#v}"
+          echo QUICKSTART_VERSION="${QUICKSTART_VERSION}" | tee -a $GITHUB_OUTPUT
           echo ZITI_VERSION_OVERRIDE=v${QUICKSTART_VERSION%-*} | tee -a $GITHUB_OUTPUT
 
       # container image tag :latest is published on merge to default branch "main" and on release tags
