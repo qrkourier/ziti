@@ -93,7 +93,7 @@ jobs:
 
           if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             # Set output parameters for release tags
-            echo QUICKSTART_VERSION="${GITHUB_REF_NAME#v}" | tee -a $GITHUB_OUTPUT
+            QUICKSTART_VERSION="${GITHUB_REF_NAME#v}"
 
           elif [[ "${GITHUB_REF_NAME}" =~ ^main$ ]]; then
             # compute the latest release version to install in the quickstart image
@@ -107,8 +107,6 @@ jobs:
             # Append short SHA to identify quickstart docker images shipped on merge to main
             QUICKSTART_VERSION="${QUICKSTART_VERSION}-$(git rev-parse --short ${GITHUB_SHA})"
 
-            echo QUICKSTART_VERSION="${QUICKSTART_VERSION}" | tee -a $GITHUB_OUTPUT
-
           else
             echo "ERROR: Unexpected GITHUB_REF_NAME=${GITHUB_REF_NAME}" >&2
             exit 1
@@ -117,13 +115,8 @@ jobs:
           # configure the env var used by the quickstart's Dockerfile to download the correct version of ziti for the
           # target architecture of each image build by trimming the hyphenated short sha suffix so that the preceding
           # release version of the ziti executable is installed in the quickstart container image
-          ZITI_VERSION_OVERRIDE=${QUICKSTART_VERSION%-*}
-          if [[ -n ${ZITI_VERSION_OVERRIDE:-} ]]; then
-            echo ZITI_VERSION_OVERRIDE="${ZITI_VERSION_OVERRIDE}" | tee -a $GITHUB_OUTPUT
-          else
-            echo "ERROR: ZITI_VERSION_OVERRIDE is empty or unset" >&2
-            exit 1
-          fi
+          echo QUICKSTART_VERSION="${QUICKSTART_VERSION}" | tee -a $GITHUB_OUTPUT
+          echo ZITI_VERSION_OVERRIDE=${QUICKSTART_VERSION%-*} | tee -a $GITHUB_OUTPUT
 
       # container image tag :latest is published on merge to default branch "main" and on release tags
       - name: Configure Quickstart Container
@@ -155,6 +148,7 @@ jobs:
           python --version
         
       - name: Deploy the CloudFront Function for get.openziti.io
+        if: github.repository_owner == 'openziti'
         shell: bash
         run: python ./dist/cloudfront/get.openziti.io/deploy-cloudfront-function.py
         env:
