@@ -93,15 +93,11 @@ jobs:
 
           if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             # Set output parameters for release tags
-            QUICKSTART_VERSION="${GITHUB_REF_NAME#v}"
+            QUICKSTART_VERSION="${GITHUB_REF_NAME}"
 
           elif [[ "${GITHUB_REF_NAME}" =~ ^main$ ]]; then
             # compute the latest release version to install in the quickstart image
             QUICKSTART_VERSION="$($(go env GOPATH)/bin/ziti-ci -q get-current-version ${ZITI_BASE_VERSION:+--base-version $ZITI_BASE_VERSION})"
-
-            # drop the leading 'v', if any
-            QUICKSTART_VERSION=${QUICKSTART_VERSION#v}
-
             validateSemver "${QUICKSTART_VERSION}"
 
             # Append short SHA to identify quickstart docker images shipped on merge to main
@@ -112,11 +108,16 @@ jobs:
             exit 1
           fi
 
-          # configure the env var used by the quickstart's Dockerfile to download the correct version of ziti for the
-          # target architecture of each image build by trimming the hyphenated short sha suffix so that the preceding
-          # release version of the ziti executable is installed in the quickstart container image
-          echo QUICKSTART_VERSION="${QUICKSTART_VERSION}" | tee -a $GITHUB_OUTPUT
-          echo ZITI_VERSION_OVERRIDE=${QUICKSTART_VERSION%-*} | tee -a $GITHUB_OUTPUT
+          # configure the env var used by the quickstart's Dockerfile to
+          # download the correct version of ziti for the target architecture of
+          # each image build by trimming the hyphenated short sha suffix so that
+          # the preceding release version of the ziti executable is installed in
+          # the quickstart container image; ensure the QUICKSTART_VERSION
+          # (container image tag) does not have a leading 'v' and the
+          # ZITI_VERSION_OVERRIDE (GitHub tag ref) does have a leading 'v'
+
+          echo QUICKSTART_VERSION="${QUICKSTART_VERSION#v}" | tee -a $GITHUB_OUTPUT
+          echo ZITI_VERSION_OVERRIDE=v${QUICKSTART_VERSION%-*} | tee -a $GITHUB_OUTPUT
 
       # container image tag :latest is published on merge to default branch "main" and on release tags
       - name: Configure Quickstart Container
