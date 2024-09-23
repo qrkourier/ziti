@@ -19,7 +19,10 @@ jobs:
     if: github.repository_owner == 'openziti' 
       && (
         startsWith(github.ref_name, 'v')
-        || (github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'quickstartrelease'))
+        || (
+          github.event.pull_request.merged == true 
+          && contains(github.event.pull_request.labels.*.name, 'quickstartrelease')
+        )
       )
     runs-on: ubuntu-latest
     env:
@@ -27,7 +30,7 @@ jobs:
       # use github.ref, not github.head_ref, because this workflow should only run on merged PRs in the target/base
       # branch context, not the PR source branch
       GITHUB_REF:            ${{ github.ref }}
-      # user github.sha, not github.pull_request.head.sha, because this workflow should only run on merged PRs in the
+      # use github.sha, not github.pull_request.head.sha, because this workflow should only run on merged PRs in the
       # target/base branch, not the PR source branch
       GITHUB_SHA:            ${{ github.sha }}
     steps:
@@ -89,7 +92,7 @@ jobs:
 
           if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             # Set output parameters for release tags
-            echo QUICKSTART_VERSION="${GITHUB_REF_NAME}" | tee -a $GITHUB_OUTPUT
+            echo QUICKSTART_VERSION="${GITHUB_REF_NAME#v}" | tee -a $GITHUB_OUTPUT
 
           elif [[ "${GITHUB_REF_NAME}" =~ ^main$ ]]; then
             # compute the latest release version to install in the quickstart image
@@ -113,8 +116,13 @@ jobs:
           # configure the env var used by the quickstart's Dockerfile to download the correct version of ziti for the
           # target architecture of each image build by trimming the hyphenated short sha suffix so that the preceding
           # release version of the ziti executable is installed in the quickstart container image
-          ZITI_OVERRIDE_VERSION=${QUICKSTART_VERSION%-*}
-          echo ZITI_OVERRIDE_VERSION="${ZITI_OVERRIDE_VERSION}" | tee -a $GITHUB_OUTPUT
+          ZITI_VERSION_OVERRIDE=${QUICKSTART_VERSION%-*}
+          if [[ -n ${ZITI_VERSION_OVERRIDE:-} ]]; then
+            echo ZITI_VERSION_OVERRIDE="${ZITI_VERSION_OVERRIDE}" | tee -a $GITHUB_OUTPUT
+          else
+            echo "ERROR: ZITI_VERSION_OVERRIDE is empty or unset" >&2
+            exit 1
+          fi
 
       # container image tag :latest is published on merge to default branch "main" and on release tags
       - name: Configure Quickstart Container
