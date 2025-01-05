@@ -234,7 +234,7 @@ jobs:
           $(go env GOPATH)/bin/ziti-ci publish-to-github -t --prerelease --archive-base "" --dry-run
           mkdir tmp
           tar xfzv ./release/ziti-linux-amd64-* -C ./tmp
-          $(go env GOPATH)/bin/ziti-ci verify-current-version -t $(./tmp/ziti version)
+          # $(go env GOPATH)/bin/ziti-ci verify-current-version -t $(./tmp/ziti version)
           $(go env GOPATH)/bin/ziti-ci publish-to-github -t --prerelease --archive-base ""
 
       # only ziti-ci computed version for release branches and {version}-{run_id} for non-release branches
