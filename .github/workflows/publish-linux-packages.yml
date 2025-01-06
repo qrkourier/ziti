@@ -30,7 +30,7 @@ jobs:
           - goreleaser: armv7
             gox: arm
             deb: armhf
-            rpm: armv7l
+            rpm: armv7hl
         packager:
           - rpm
           - deb
