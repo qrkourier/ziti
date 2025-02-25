@@ -37,8 +37,13 @@ jobs:
       - name: Build and Test
         shell: bash
         run: |
+
+          set -o xtrace
+
           go install github.com/mitchellh/gox@latest
+
           $(go env GOPATH)/bin/gox -ldflags "$($(go env GOPATH)/bin/ziti-ci -q -t go-build-flags)" -cgo -os=darwin -arch=amd64 -output=$GOX_OUTPUT ./ziti/
+
           $(go env GOPATH)/bin/gox -ldflags "$($(go env GOPATH)/bin/ziti-ci -q -t go-build-flags)" -cgo -os=darwin -arch=arm64 -output=$GOX_OUTPUT ./ziti/
 
       - name: Upload artifacts
@@ -70,7 +75,11 @@ jobs:
       - name: Build and Test
         shell: bash
         run: |
+
+          set -o xtrace
+
           go install github.com/mitchellh/gox@latest
+
           $(go env GOPATH)/bin/gox -ldflags "$($(go env GOPATH)/bin/ziti-ci -q -t go-build-flags)" -cgo -os=windows -arch=amd64 -output=$GOX_OUTPUT ./ziti/
 
       - name: Upload artifacts
@@ -99,17 +108,27 @@ jobs:
         uses: openziti/ziti-ci@v1
 
       - name: Build and Test
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ziti_ci_gpg_key: ${{ secrets.ZITI_CI_GPG_KEY }}
+          ziti_ci_gpg_key_id: ${{ secrets.ZITI_CI_GPG_KEY_ID }}
         shell: bash
         run: |
-          apt-get update
-          apt-get -yq install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+
+          set -o xtrace
+          # no need to install cross-compile/multi-arch toolchain because it's already installed in the ziti-builder
+          # container image
+
           $(go env GOPATH)/bin/ziti-ci configure-git
           go install github.com/mitchellh/gox@latest
           $(go env GOPATH)/bin/ziti-ci -t go-build-flags
+
           $(go env GOPATH)/bin/gox -ldflags "$($(go env GOPATH)/bin/ziti-ci -q -t go-build-flags)" -cgo -os=linux -arch=amd64 -output=$GOX_OUTPUT ./ziti/
           CC=arm-linux-gnueabihf-gcc \
+
           $(go env GOPATH)/bin/gox -ldflags "$($(go env GOPATH)/bin/ziti-ci -q -t go-build-flags)" -cgo -os=linux -arch=arm -output=$GOX_OUTPUT ./ziti/
           CC=aarch64-linux-gnu-gcc \
+
           $(go env GOPATH)/bin/gox -ldflags "$($(go env GOPATH)/bin/ziti-ci -q -t go-build-flags)" -cgo -os=linux -arch=arm64 -output=$GOX_OUTPUT ./ziti/
 
       - name: Upload artifacts
@@ -161,6 +180,10 @@ jobs:
       }}
     # ensure required job outcomes are specified in "if" expression
     needs: [ tests, linux-build, mac-os-build, windows-build ]
+    permissions:
+      contents: write  # need write to create the release
+      id-token: write  # need write to get OIDC token for generating attestations
+      attestations: write  # need write to create attestations
     runs-on: ubuntu-24.04
     outputs:
       ZITI_VERSION: ${{ steps.get_version.outputs.ZITI_VERSION }}
@@ -203,21 +226,68 @@ jobs:
           name: windows-release-${{ github.run_id }}
           path: release/
 
-      - name: List downloaded release artifacts
+      - name: Fetch Source Archive
+        shell: bash
+        run: |
+
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/tarball/${{ github.ref_name }} \
+            > ./release/source-${{ github.ref_name }}.tar.gz
+
+      - name: Build SBOM from Dependency Graph as SPDX JSON
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+
+          # grep fails the step if graph is empty
+          # jq fails the step if not valid JSON
+          set -o pipefail
+
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/dependency-graph/sbom \
+          | grep -q . | jq . | tee ./release/sbom-${{ github.ref_name }}.spdx.json
+
+      - name: Create Checksum Files
+        shell: bash
+        run: |
+
+          # create checksum file for the attestations
+          shasum --algorithm 256 ./release/* | tee /tmp/attestation-subjects.sha256.txt
+
+          # create checksum file for the release
+          cd ./release/
+          shasum --algorithm 256 ./* | tee ./checksums.sha256.txt
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-checksums: /tmp/attestation-subjects.sha256.txt
+
+      - name: List Release Artifacts
         shell: bash
         run: |
           ls -lAhR release/
 
-      - name: Restore execute filemode on macOS and Linux release artifacts before publishing
+      - name: Set Filemode on Unix Executables
         shell: bash
         run: |
+
+          # grep fails the step if none found
+          set -o pipefail
+
           find  ./release \
                 -type f \
                 -print0 \
                 -path "./release/*/darwin/ziti" \
                 -o \
                 -path "./release/*/linux/ziti" \
-            | xargs -0 chmod -c +x
+          | grep -q . \
+          | xargs -0r chmod -c +x
 
       - name: Publish GitHub Release
         # forks need to run this step with their own GPG key because ziti-ci creates the GH release 
@@ -228,11 +298,17 @@ jobs:
           ziti_ci_gpg_key_id: ${{ secrets.ZITI_CI_GPG_KEY_ID }}
         shell: bash
         run: |
+
+          set -o xtrace
+
           $(go env GOPATH)/bin/ziti-ci configure-git
+
           $(go env GOPATH)/bin/ziti-ci publish-to-github -t --prerelease --archive-base "" --dry-run
-          mkdir tmp
+
+          mkdir ./tmp
           tar xfzv ./release/ziti-linux-amd64-* -C ./tmp
           $(go env GOPATH)/bin/ziti-ci verify-current-version -t $(./tmp/ziti version)
+
           $(go env GOPATH)/bin/ziti-ci publish-to-github -t --prerelease --archive-base ""
 
       # only ziti-ci computed version for release branches and {version}-{run_id} for non-release branches
@@ -240,6 +316,7 @@ jobs:
         id: get_version
         shell: bash
         run: |
+
           # drop the leading 'v', if any
           ZITI_VERSION=${GITHUB_REF_NAME#v}
           echo ZITI_VERSION="${ZITI_VERSION}" | tee -a $GITHUB_OUTPUT
