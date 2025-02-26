@@ -106,6 +106,8 @@ jobs:
 
       - name: Install Ziti CI
         uses: openziti/ziti-ci@v1
+        with:
+          ziti-ci-version: trust-known-hosts
 
       - name: Build and Test
         env:
@@ -116,11 +118,11 @@ jobs:
         run: |
 
           set -o xtrace
-          # no need to install cross-compile/multi-arch toolchain because it's already installed in the ziti-builder
-          # container image
 
           $(go env GOPATH)/bin/ziti-ci configure-git
+
           go install github.com/mitchellh/gox@latest
+
           $(go env GOPATH)/bin/ziti-ci -t go-build-flags
 
           $(go env GOPATH)/bin/gox -ldflags "$($(go env GOPATH)/bin/ziti-ci -q -t go-build-flags)" -cgo -os=linux -arch=amd64 -output=$GOX_OUTPUT ./ziti/
