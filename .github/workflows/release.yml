@@ -107,7 +107,7 @@ jobs:
       - name: Install Ziti CI
         uses: openziti/ziti-ci@v1
         with:
-          ziti-ci-version: latest
+          ziti-ci-version: release-artifacts-dir
 
       - name: Build and Test
         env:
