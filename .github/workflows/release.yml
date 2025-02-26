@@ -270,7 +270,8 @@ jobs:
 
           # create checksum file for the release
           cd ./release/
-          find . -type f -print0 | xargs -0r shasum --algorithm 256 | tee ./checksums.sha256.txt
+          find . -type f -print0 | xargs -0r shasum --algorithm 256 | tee /tmp/checksums.sha256.txt
+          mv /tmp/checksums.sha256.txt ./checksums.sha256.txt
 
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v2
