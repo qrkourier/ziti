@@ -298,13 +298,15 @@ jobs:
 
           $(go env GOPATH)/bin/ziti-ci configure-git
 
-          $(go env GOPATH)/bin/ziti-ci publish-to-github -t --prerelease --archive-base "" --dry-run
+          $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base "" --dry-run
 
           mkdir ./tmp
           tar xfzv ./release/ziti-linux-amd64-* -C ./tmp
-          $(go env GOPATH)/bin/ziti-ci verify-current-version -t $(./tmp/ziti version)
+          chmod -c +x ./tmp/ziti
+          # TODO: should this compare current tag with "ziti --version" instead?
+          $(go env GOPATH)/bin/ziti-ci verify-current-version --use-current-tag "$(./tmp/ziti version)"
 
-          $(go env GOPATH)/bin/ziti-ci publish-to-github -t --prerelease --archive-base ""
+          $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base ""
 
       # only ziti-ci computed version for release branches and {version}-{run_id} for non-release branches
       - name: Compute the Ziti Version String used for Linux Packages and Container Image Tags
