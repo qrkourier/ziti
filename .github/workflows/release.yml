@@ -260,26 +260,6 @@ jobs:
             /repos/${{ github.repository }}/dependency-graph/sbom \
           | jq . | tee ./release/sbom-${{ github.ref_name }}.spdx.json
 
-      - name: Create Checksum Files
-        shell: bash
-        run: |
-
-          set -o pipefail
-          set -o xtrace
-
-          # create checksum file for the attestations
-          find ./release -type f -print0 | xargs -0r shasum --algorithm 256 | tee /tmp/attestation-subjects.sha256.txt
-
-          # create checksum file for the release
-          cd ./release/
-          find . -type f -print0 | xargs -0r shasum --algorithm 256 | tee /tmp/checksums.sha256.txt
-          mv /tmp/checksums.sha256.txt ./checksums.sha256.txt
-
-      - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-checksums: /tmp/attestation-subjects.sha256.txt
-
       - name: List Release Artifacts
         shell: bash
         run: |
@@ -302,12 +282,16 @@ jobs:
 
           $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base "" --dry-run
 
-          mkdir ./tmp
-          tar xfzv ./release/ziti-linux-amd64-* -C ./tmp
+          tar xfzv ./release/ziti-linux-amd64-* -C /tmp
           # TODO: should this compare current tag with "ziti --version" instead?
-          $(go env GOPATH)/bin/ziti-ci verify-current-version --use-current-tag "$(./tmp/ziti version)"
+          $(go env GOPATH)/bin/ziti-ci verify-current-version --use-current-tag "$(/tmp/ziti version)"
 
           $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base ""
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-checksums: ./release/attestation-subjects.sha256.txt
 
       # only ziti-ci computed version for release branches and {version}-{run_id} for non-release branches
       - name: Compute the Ziti Version String used for Linux Packages and Container Image Tags
