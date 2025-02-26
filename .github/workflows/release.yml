@@ -107,7 +107,7 @@ jobs:
       - name: Install Ziti CI
         uses: openziti/ziti-ci@v1
         with:
-          ziti-ci-version: trust-known-hosts
+          ziti-ci-version: latest
 
       - name: Build and Test
         env:
