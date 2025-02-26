@@ -254,18 +254,21 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/dependency-graph/sbom \
-          | grep -q . | jq . | tee ./release/sbom-${{ github.ref_name }}.spdx.json
+          | grep . | jq . | tee ./release/sbom-${{ github.ref_name }}.spdx.json
 
       - name: Create Checksum Files
         shell: bash
         run: |
 
+          # grep fails the step if none found
+          set -o pipefail
+
           # create checksum file for the attestations
-          shasum --algorithm 256 ./release/* | tee /tmp/attestation-subjects.sha256.txt
+          find ./release -type f -print0 | xargs -0r shasum --algorithm 256 | grep . | tee /tmp/attestation-subjects.sha256.txt
 
           # create checksum file for the release
           cd ./release/
-          shasum --algorithm 256 ./* | tee ./checksums.sha256.txt
+          find . -type f -print0 | xargs -0r shasum --algorithm 256 | grep . | tee ./checksums.sha256.txt
 
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v2
@@ -275,6 +278,7 @@ jobs:
       - name: List Release Artifacts
         shell: bash
         run: |
+
           ls -lAhR release/
 
       - name: Set Filemode on Unix Executables
@@ -290,7 +294,7 @@ jobs:
                 -path "./release/*/darwin/ziti" \
                 -o \
                 -path "./release/*/linux/ziti" \
-          | grep -q . \
+          | grep . \
           | xargs -0r chmod -c +x
 
       - name: Publish GitHub Release
