@@ -151,9 +151,11 @@ func NewManager(stateEnv env.RouterEnv) Manager {
 	}
 
 	stateEnv.GetNetworkControllers().AddChangeListener(env.CtrlEventListenerFunc(func(event env.CtrlEvent) {
-		select {
-		case result.endpointsChanged <- event:
-		default:
+		if event.Type != env.ControllerLeaderChange {
+			select {
+			case result.endpointsChanged <- event:
+			default:
+			}
 		}
 	}))
 
@@ -507,7 +509,7 @@ func (sm *ManagerImpl) SetRouterDataModel(model *common.RouterDataModel, resetSu
 	existing := sm.routerDataModel.Swap(model)
 	if existing != nil {
 		existing.Stop()
-		model.InheritSubscribers(existing)
+		model.InheritLocalData(existing)
 		existingIndex, _ := existing.CurrentIndex()
 		logger = logger.WithField("existingIndex", existingIndex)
 		if index < existingIndex {

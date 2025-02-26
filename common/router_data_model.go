@@ -62,6 +62,62 @@ type Identity struct {
 	serviceSetIndex uint64
 }
 
+func (self *Identity) Equals(other *Identity) bool {
+	log := pfxlog.Logger().WithField("identity", self.identityIndex)
+	if self.Disabled != other.Disabled {
+		log.Info("identity updated, disabled flag changed")
+		return false
+	}
+
+	if self.Name != other.Name {
+		log.Info("identity updated, name changed")
+		return false
+	}
+
+	if string(self.AppDataJson) != string(other.AppDataJson) {
+		log.Info("identity updated, appDataJson changed")
+		return false
+	}
+
+	if self.DefaultHostingPrecedence != other.DefaultHostingPrecedence {
+		log.Info("identity updated, default hosting precedence changed")
+		return false
+	}
+
+	if self.DefaultHostingCost != other.DefaultHostingCost {
+		log.Info("identity updated, default hosting host changed")
+		return false
+	}
+
+	if len(self.ServiceHostingPrecedences) != len(other.ServiceHostingPrecedences) {
+		log.Info("identity updated, number of service hosting precedences changed")
+		return false
+	}
+
+	if len(self.ServiceHostingCosts) != len(other.ServiceHostingCosts) {
+		log.Info("identity updated, number of service hosting costs changed")
+		return false
+	}
+
+	for k, v := range self.ServiceHostingPrecedences {
+		v2, ok := other.ServiceHostingPrecedences[k]
+		if !ok || v != v2 {
+			log.Info("identity updated, a service hosting precedence changed")
+			return false
+		}
+	}
+
+	for k, v := range self.ServiceHostingCosts {
+		v2, ok := other.ServiceHostingCosts[k]
+		if !ok || v != v2 {
+			log.Info("identity updated, a service hosting cost changed")
+			return false
+		}
+	}
+
+	return true
+}
+
 type DataStateConfigType = edge_ctrl_pb.DataState_ConfigType
 
 type ConfigType struct {
@@ -69,11 +125,31 @@ type ConfigType struct {
 	index uint64
 }
 
+func (self *ConfigType) Equals(other *ConfigType) bool {
+	return self.Name == other.Name
+}
+
 type DataStateConfig = edge_ctrl_pb.DataState_Config
 
 type Config struct {
 	*DataStateConfig
 	index uint64
+}
+
+func (self *Config) Equals(other *Config) bool {
+	if self.Name != other.Name {
+		return false
+	}
+
+	if self.TypeId != other.TypeId {
+		return false
+	}
+
+	if self.DataJson != other.DataJson {
+		return false
+	}
+
+	return true
 }
 
 type DataStateService = edge_ctrl_pb.DataState_Service
@@ -117,6 +193,8 @@ type RouterDataModel struct {
 	Revocations      cmap.ConcurrentMap[string, *edge_ctrl_pb.DataState_Revocation] `json:"revocations"`
 	cachedPublicKeys concurrenz.AtomicValue[map[string]crypto.PublicKey]
 
+	terminatorIdCache cmap.ConcurrentMap[string, string]
+
 	listenerBufferSize uint
 	lastSaveIndex      *uint64
 
@@ -134,15 +212,16 @@ type RouterDataModel struct {
 // NewBareRouterDataModel creates a new RouterDataModel that is expected to have no buffers, listeners or subscriptions
 func NewBareRouterDataModel() *RouterDataModel {
 	return &RouterDataModel{
-		EventCache:      NewForgetfulEventCache(),
-		ConfigTypes:     cmap.New[*ConfigType](),
-		Configs:         cmap.New[*Config](),
-		Identities:      cmap.New[*Identity](),
-		Services:        cmap.New[*Service](),
-		ServicePolicies: cmap.New[*ServicePolicy](),
-		PostureChecks:   cmap.New[*PostureCheck](),
-		PublicKeys:      cmap.New[*edge_ctrl_pb.DataState_PublicKey](),
-		Revocations:     cmap.New[*edge_ctrl_pb.DataState_Revocation](),
+		EventCache:        NewForgetfulEventCache(),
+		ConfigTypes:       cmap.New[*ConfigType](),
+		Configs:           cmap.New[*Config](),
+		Identities:        cmap.New[*Identity](),
+		Services:          cmap.New[*Service](),
+		ServicePolicies:   cmap.New[*ServicePolicy](),
+		PostureChecks:     cmap.New[*PostureCheck](),
+		PublicKeys:        cmap.New[*edge_ctrl_pb.DataState_PublicKey](),
+		Revocations:       cmap.New[*edge_ctrl_pb.DataState_Revocation](),
+		terminatorIdCache: cmap.New[string](),
 	}
 }
 
@@ -161,6 +240,7 @@ func NewSenderRouterDataModel(timelineId string, logSize uint64, listenerBufferS
 		Revocations:        cmap.New[*edge_ctrl_pb.DataState_Revocation](),
 		listenerBufferSize: listenerBufferSize,
 		timelineId:         timelineId,
+		terminatorIdCache:  cmap.New[string](),
 	}
 }
 
@@ -182,6 +262,7 @@ func NewReceiverRouterDataModel(listenerBufferSize uint, closeNotify <-chan stru
 		events:             make(chan subscriberEvent),
 		closeNotify:        closeNotify,
 		stopNotify:         make(chan struct{}),
+		terminatorIdCache:  cmap.New[string](),
 	}
 	go result.processSubscriberEvents()
 	return result
@@ -206,6 +287,13 @@ func NewReceiverRouterDataModelFromDataState(dataState *edge_ctrl_pb.DataState, 
 		closeNotify:        closeNotify,
 		stopNotify:         make(chan struct{}),
 		timelineId:         dataState.TimelineId,
+		terminatorIdCache:  cmap.New[string](),
+	}
+
+	if tIdCache, ok := dataState.Caches[edge_ctrl_pb.CacheType_TerminatorIds.String()]; ok && tIdCache != nil && tIdCache.Data != nil {
+		for k, v := range tIdCache.Data {
+			result.terminatorIdCache.Set(k, string(v))
+		}
 	}
 
 	go result.processSubscriberEvents()
@@ -239,6 +327,8 @@ func NewReceiverRouterDataModelFromExisting(existing *RouterDataModel, listenerB
 		events:             make(chan subscriberEvent),
 		closeNotify:        closeNotify,
 		stopNotify:         make(chan struct{}),
+		timelineId:         existing.timelineId,
+		terminatorIdCache:  existing.terminatorIdCache,
 	}
 	currentIndex, _ := existing.CurrentIndex()
 	result.SetCurrentIndex(currentIndex)
@@ -785,10 +875,29 @@ func (rdm *RouterDataModel) getDataStateAlreadyLocked(index uint64) *edge_ctrl_p
 		events = append(events, newEvent)
 	})
 
+	var caches map[string]*edge_ctrl_pb.Cache
+
+	if !rdm.terminatorIdCache.IsEmpty() {
+		caches = map[string]*edge_ctrl_pb.Cache{}
+
+		cache := &edge_ctrl_pb.Cache{
+			Data: map[string][]byte{},
+		}
+
+		rdm.terminatorIdCache.IterCb(func(key string, v string) {
+			if rdm.Services.Has(key) {
+				cache.Data[key] = []byte(v)
+			}
+		})
+
+		caches[edge_ctrl_pb.CacheType_TerminatorIds.String()] = cache
+	}
+
 	return &edge_ctrl_pb.DataState{
 		Events:     events,
 		EndIndex:   index,
 		TimelineId: rdm.timelineId,
+		Caches:     caches,
 	}
 }
 
@@ -908,16 +1017,20 @@ func (rdm *RouterDataModel) SubscribeToIdentityChanges(identityId string, subscr
 	})
 
 	if identity != nil {
-		state := subscription.initialize(rdm, identity)
+		state, _ := subscription.initialize(rdm, identity)
 		subscriber.NotifyIdentityEvent(state, EventFullState)
 	}
 
 	return nil
 }
 
-func (rdm *RouterDataModel) InheritSubscribers(other *RouterDataModel) {
+func (rdm *RouterDataModel) InheritLocalData(other *RouterDataModel) {
 	other.subscriptions.IterCb(func(key string, v *IdentitySubscription) {
 		rdm.subscriptions.Set(key, v)
+	})
+
+	other.terminatorIdCache.IterCb(func(key string, v string) {
+		rdm.terminatorIdCache.Set(key, v)
 	})
 }
 
@@ -1042,6 +1155,10 @@ func (rdm *RouterDataModel) GetEntityCounts() map[string]uint32 {
 		"cached-public-keys": uint32(rdm.getPublicKeysAsCmap().Count()),
 	}
 	return result
+}
+
+func (rdm *RouterDataModel) GetTerminatorIdCache() cmap.ConcurrentMap[string, string] {
+	return rdm.terminatorIdCache
 }
 
 type DiffType string

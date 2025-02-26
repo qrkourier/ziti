@@ -30,11 +30,10 @@ import (
 	"github.com/openziti/ziti/tunnel/intercept/host"
 	"github.com/openziti/ziti/tunnel/intercept/proxy"
 	"github.com/openziti/ziti/tunnel/intercept/tproxy"
-	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/pkg/errors"
-	"math"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -47,25 +46,29 @@ type tunneler struct {
 	interceptor     intercept.Interceptor
 	serviceListener *intercept.ServiceListener
 	fabricProvider  *fabricProvider
-	terminators     cmap.ConcurrentMap[string, *tunnelTerminator]
+	hostedServices  *hostedServiceRegistry
 	notifyReconnect chan struct{}
+
+	createTime  time.Time
+	initialized atomic.Bool
 }
 
 func newTunneler(factory *Factory) *tunneler {
 	result := &tunneler{
 		env:             factory.env,
-		terminators:     cmap.New[*tunnelTerminator](),
+		hostedServices:  factory.hostedServices,
 		notifyReconnect: make(chan struct{}, 1),
+		createTime:      time.Now(),
 	}
 
 	result.fabricProvider = newProvider(factory, result)
 
-	go result.ReestablishmentRunner()
-
 	return result
 }
 
-func (self *tunneler) Start(notifyClose <-chan struct{}) error {
+func (self *tunneler) Start() error {
+	defer self.initialized.Store(true)
+
 	var err error
 	var resolver dns.Resolver
 
@@ -111,8 +114,6 @@ func (self *tunneler) Start(notifyClose <-chan struct{}) error {
 	self.serviceListener = intercept.NewServiceListener(self.interceptor, resolver)
 	self.serviceListener.HandleProviderReady(self.fabricProvider)
 
-	go self.removeStaleConnections(notifyClose)
-
 	if err = self.env.GetRouterDataModel().SubscribeToIdentityChanges(self.env.GetRouterId().Token, self, true); err != nil {
 		return err
 	}
@@ -120,31 +121,13 @@ func (self *tunneler) Start(notifyClose <-chan struct{}) error {
 	return nil
 }
 
-func (self *tunneler) removeStaleConnections(notifyClose <-chan struct{}) {
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
+func (self *tunneler) WaitForInitialized() {
+	if self.initialized.Load() {
+		return
+	}
 
-	for {
-		select {
-		case <-ticker.C:
-			var toRemove []string
-			self.terminators.IterCb(func(key string, t *tunnelTerminator) {
-
-				if t.closed.Load() {
-					toRemove = append(toRemove, key)
-				}
-
-			})
-
-			for _, key := range toRemove {
-				if t, found := self.terminators.Get(key); found {
-					self.terminators.Remove(key)
-					pfxlog.Logger().Debugf("removed closed tunnel terminator %v for service %v", key, t.context.ServiceName())
-				}
-			}
-		case <-notifyClose:
-			return
-		}
+	for !self.initialized.Load() && time.Since(self.createTime) < (2*time.Minute) {
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -158,66 +141,13 @@ func (self *tunneler) Close() error {
 	return nil
 }
 
-func (self *tunneler) HandleReconnect() {
-	terminators := self.terminators.Items()
-	for _, terminator := range terminators {
-		terminator.created.Store(false)
-	}
-
-	select {
-	case self.notifyReconnect <- struct{}{}:
-	default:
-	}
-}
-
-func (self *tunneler) ReestablishmentRunner() {
-	for {
-		<-self.notifyReconnect
-		self.ReestablishTerminators()
-	}
-}
-
-func (self *tunneler) ReestablishTerminators() {
-	log := pfxlog.Logger()
-	terminators := self.terminators.Items()
-
-	time.Sleep(10 * time.Second) // wait for validate terminator messages to come in first
-
-	if len(terminators) > 0 {
-		pfxlog.Logger().Debugf("reestablishing %v terminators", len(terminators))
-	}
-
-	count := 1
-	for _, terminator := range terminators {
-		t := terminator
-		if !terminator.created.Load() && !terminator.closed.Load() {
-			err := self.fabricProvider.factory.env.GetRateLimiterPool().QueueWithTimeout(func() {
-				self.fabricProvider.establishTerminatorWithRetry(t)
-			}, math.MaxInt64)
-
-			if err != nil {
-				// should only happen if router is shutting down
-				log.WithField("terminatorId", terminator.id).WithError(err).
-					Error("unable to queue terminator reestablishment")
-			}
-		} else if terminator.created.Load() {
-			log.Infof("terminator %v already verified", terminator.id)
-		} else if terminator.closed.Load() {
-			log.Infof("terminator %v closed, can't reestablish", terminator.id)
-		}
-		count++
-	}
-
-	if len(terminators) > 0 {
-		log.Debug("finished queueing terminator reestablishment")
-	}
-}
-
 func (self *tunneler) NotifyIdentityEvent(state *common.IdentityState, eventType common.IdentityEventType) {
 	if eventType == common.EventIdentityDeleted || state.Identity.Disabled {
+		pfxlog.Logger().Infof("identity deleted or disabled %s, eventType: %s", state.Identity.Id, eventType)
 		self.fabricProvider.updateIdentity(self.mapRdmIdentityToRest(state.Identity))
 		self.serviceListener.Reset()
 	} else if eventType == common.EventFullState || eventType == common.EventIdentityUpdated {
+		pfxlog.Logger().Infof("identity updated %s, eventType: %s", state.Identity.Id, eventType)
 		self.fabricProvider.updateIdentity(self.mapRdmIdentityToRest(state.Identity))
 		self.serviceListener.Reset()
 		for _, svc := range state.Services {
@@ -226,7 +156,8 @@ func (self *tunneler) NotifyIdentityEvent(state *common.IdentityState, eventType
 	}
 }
 
-func (self *tunneler) NotifyServiceChange(_ *common.IdentityState, service *common.IdentityService, eventType common.ServiceEventType) {
+func (self *tunneler) NotifyServiceChange(state *common.IdentityState, service *common.IdentityService, eventType common.ServiceEventType) {
+	pfxlog.Logger().Infof("service changed for %s. service %s was %s", state.Identity.Name, service.Service.Name, eventType)
 	tunSvc := self.mapRdmServiceToRest(service)
 	switch eventType {
 	case common.EventAccessGained:
