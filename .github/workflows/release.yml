@@ -287,8 +287,9 @@ jobs:
           $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base "" --dry-run
 
           tar xfzv ./release/ziti-linux-amd64-* -C /tmp
+          ls -lAR /tmp/ziti*
 
-          $(go env GOPATH)/bin/ziti-ci verify-current-version --use-current-tag "$(/tmp/ziti version)"
+          $(go env GOPATH)/bin/ziti-ci verify-current-version --use-current-tag "$(/tmp/ziti/ziti version | head -n1 | tr -d '\n\r')"
 
           $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base ""
 
