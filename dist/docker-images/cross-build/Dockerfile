@@ -29,7 +29,6 @@ ENV GOPATH=${go_path}
 ENV GOROOT=${go_root}
 ENV GOCACHE=${go_cache}
 ENV PATH=${go_path}/bin:${go_root}/bin:$PATH
-ENV GOEXPERIMENT=""
 ENV CGO_ENABLED=1
 RUN go install github.com/mitchellh/gox@latest
 WORKDIR /mnt
