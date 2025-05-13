@@ -74,7 +74,7 @@ jobs:
       - name: Publish Attestations to GitHub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}:${{ env.ZITI_CLI_TAG }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}
           subject-digest: ${{ steps.push_cli.outputs.digest }}
           push-to-registry: true
 
@@ -107,7 +107,7 @@ jobs:
       - name: Publish Attestations to GitHub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}:${{ env.ZITI_CLI_TAG }}-boring
+          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}
           subject-digest: ${{ steps.push_cli_boring.outputs.digest }}
           push-to-registry: true
 
@@ -140,7 +140,7 @@ jobs:
       - name: Publish Attestations to GitHub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_CONTROLLER_IMAGE }}:${{ env.ZITI_CLI_TAG }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_CONTROLLER_IMAGE }}
           subject-digest: ${{ steps.push_ctrl.outputs.digest }}
           push-to-registry: true
 
@@ -173,7 +173,7 @@ jobs:
       - name: Publish Attestations to GitHub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_CONTROLLER_IMAGE }}:${{ env.ZITI_CLI_TAG }}-boring
+          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_CONTROLLER_IMAGE }}
           subject-digest: ${{ steps.push_ctrl_boring.outputs.digest }}
           push-to-registry: true
 
@@ -206,7 +206,7 @@ jobs:
       - name: Publish Attestations to GitHub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_ROUTER_IMAGE }}:${{ env.ZITI_CLI_TAG }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_ROUTER_IMAGE }}
           subject-digest: ${{ steps.push_router.outputs.digest }}
           push-to-registry: true
 
@@ -239,7 +239,7 @@ jobs:
       - name: Publish Attestations to GitHub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_ROUTER_IMAGE }}:${{ env.ZITI_CLI_TAG }}-boring
+          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_ROUTER_IMAGE }}
           subject-digest: ${{ steps.push_router_boring.outputs.digest }}
           push-to-registry: true
 
@@ -271,7 +271,7 @@ jobs:
       - name: Publish Attestations to GitHub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_TUNNEL_IMAGE }}:${{ env.ZITI_CLI_TAG }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_TUNNEL_IMAGE }}
           subject-digest: ${{ steps.push_tunnel.outputs.digest }}
           push-to-registry: true
 
@@ -303,6 +303,6 @@ jobs:
       - name: Publish Attestations to GitHub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_TUNNEL_IMAGE }}:${{ env.ZITI_CLI_TAG }}-boring
+          subject-name: ${{ env.REGISTRY }}/${{ env.ZITI_TUNNEL_IMAGE }}
           subject-digest: ${{ steps.push_tunnel_boring.outputs.digest }}
           push-to-registry: true
