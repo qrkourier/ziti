@@ -284,12 +284,17 @@ jobs:
 
           $(go env GOPATH)/bin/ziti-ci configure-git
 
+          # workaround: prune the boring build from the release tarball so it will not force the regular ziti binary into a nested path /ziti/ziti
+          rm -fv ./release/amd64/linux/ziti-boring
+
+          # dry run to build release tarball we'll use to double-check the internal version matches the tag
           $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base "" --dry-run
 
+          # if we decide to bundle the boring build into the release tarball, we need to target this extraction to accomodate the nested path
+          # tar xfzv ./release/ziti-linux-amd64-* ziti/ziti -C /tmp --strip-components=1
           tar xfzv ./release/ziti-linux-amd64-* -C /tmp
-          ls -lAR /tmp/ziti*
 
-          $(go env GOPATH)/bin/ziti-ci verify-current-version --use-current-tag "$(/tmp/ziti/ziti version | head -n1 | tr -d '\n\r')"
+          $(go env GOPATH)/bin/ziti-ci verify-current-version --use-current-tag "$(/tmp/ziti version)"
 
           $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base ""
 
