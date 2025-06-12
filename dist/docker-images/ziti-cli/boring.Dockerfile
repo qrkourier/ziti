@@ -31,6 +31,9 @@ LABEL name="openziti/ziti-cli" \
 
 USER root
 
+# Switch to old-releases.ubuntu.com for legacy Ubuntu 23.04
+RUN sed -Ei 's/(security|archive)\.ubuntu\.com/old-releases.ubuntu.com/g' /etc/apt/sources.list
+
 ### install packages
 RUN   apt-get update \
       && DEBIAN_FRONTEND=noninteractive apt-get install \
@@ -53,12 +56,12 @@ RUN mkdir -p -m0755 /licenses
 COPY ./LICENSE /licenses/apache.txt
 
 RUN groupadd --gid ${ZGID} ziggy \
-      && adduser --uid ${ZUID} --gid ${ZGID} --system --home-dir ${HOME} --shell /bin/bash ziggy \
+      && useradd --uid ${ZUID} --gid ${ZGID} --system --home-dir ${HOME} --shell /bin/bash ziggy \
       && mkdir -p ${HOME} \
       && chown -R ${ZUID}:${ZGID} ${HOME} \
       && chmod -R g+rwX ${HOME}
 
-RUN mkdir -p /usr/local/bin
+RUN mkdir -p /usr/local/bin /etc/bash_completion.d
 COPY --chmod=0755 ${ARTIFACTS_DIR}/${TARGETARCH}/${TARGETOS}/ziti-fips /usr/local/bin/ziti
 
 RUN /usr/local/bin/ziti completion bash > /etc/bash_completion.d/ziti_cli
