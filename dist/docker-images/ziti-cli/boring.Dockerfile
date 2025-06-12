@@ -1,15 +1,71 @@
-# this Dockerfile builds docker.io/openziti/ziti-controller
+# this Dockerfile builds docker.io/openziti/ziti-cli:{version}-fips
 
-ARG ZITI_CLI_TAG="latest"
-ARG ZITI_CLI_IMAGE="docker.io/openziti/ziti-cli"
+# get kubectl CLI from a source with Docker Content Trust (DCT)
+# FIXME: require DCT at build time
+FROM bitnami/kubectl:1.33 AS bitnami-kubectl
 
-FROM ${ZITI_CLI_IMAGE}:${ZITI_CLI_TAG}
+# FIXME: This repo requires terms acceptance and is only available on registry.redhat.io.
+# FROM registry.access.redhat.com/openshift4/ose-cli AS openshift-cli
+
+FROM ubuntu:23.04
+# This build stage grabs artifacts that are copied into the final image.
+# It uses the same base as the final image to maximize docker cache hits.
 
 ARG ARTIFACTS_DIR=./release
 ARG DOCKER_BUILD_DIR=./dist/docker-images/ziti-cli
-# e.g. linux
-ARG TARGETOS
 # e.g. arm64
 ARG TARGETARCH
+# e.g. linux
+ARG TARGETOS
 
+ARG ZUID=2171
+ARG ZGID=2171
+
+ARG HOME=/home/ziggy
+
+LABEL name="openziti/ziti-cli" \
+      maintainer="developers@openziti.org" \
+      vendor="NetFoundry" \
+      summary="Run the OpenZiti CLI" \
+      description="Run the OpenZiti CLI"
+
+USER root
+
+### install packages
+RUN   apt-get update \
+      && DEBIAN_FRONTEND=noninteractive apt-get install \
+            -y --no-install-recommends \
+            bash-completion \
+            findutils \
+            hostname \
+            jq \
+            less \
+            python3 \
+            python3-pip \
+            tar \
+            vim-tiny \
+      && rm -rf /var/lib/apt/lists/*
+
+### install Kubernetes CLI
+COPY --from=bitnami-kubectl /opt/bitnami/kubectl/bin/kubectl /usr/local/bin/
+
+RUN mkdir -p -m0755 /licenses
+COPY ./LICENSE /licenses/apache.txt
+
+RUN groupadd --gid ${ZGID} ziggy \
+      && adduser --uid ${ZUID} --gid ${ZGID} --system --home ${HOME} --shell /bin/bash ziggy \
+      && mkdir -p ${HOME} \
+      && chown -R ${ZUID}:${ZGID} ${HOME} \
+      && chmod -R g+rwX ${HOME}
+
+RUN mkdir -p /usr/local/bin
 COPY --chmod=0755 ${ARTIFACTS_DIR}/${TARGETARCH}/${TARGETOS}/ziti-fips /usr/local/bin/ziti
+
+RUN /usr/local/bin/ziti completion bash > /etc/bash_completion.d/ziti_cli
+
+USER ziggy
+ENV HOME=${HOME}
+WORKDIR ${HOME}
+COPY ${DOCKER_BUILD_DIR}/bashrc ${HOME}/.bashrc
+
+ENTRYPOINT [ "ziti" ]
