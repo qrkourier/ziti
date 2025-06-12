@@ -53,7 +53,7 @@ RUN mkdir -p -m0755 /licenses
 COPY ./LICENSE /licenses/apache.txt
 
 RUN groupadd --gid ${ZGID} ziggy \
-      && adduser --uid ${ZUID} --gid ${ZGID} --system --home ${HOME} --shell /bin/bash ziggy \
+      && adduser --uid ${ZUID} --gid ${ZGID} --system --home-dir ${HOME} --shell /bin/bash ziggy \
       && mkdir -p ${HOME} \
       && chown -R ${ZUID}:${ZGID} ${HOME} \
       && chmod -R g+rwX ${HOME}
