@@ -88,9 +88,7 @@ RUN   case "${TARGETARCH}" in \
       && /usr/local/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module "${LIB_DIR}/ossl-modules/fips.so"
 
 # always use FIPS (sets the default openssl config to use the FIPS provider), also the config dir for the self-built openssl is /usr/local/ssl and NOT /etc/ssl
-RUN sed -i '/\.include fipsmodule\.cnf/s/^# //g' /usr/local/ssl/openssl.cnf \
-      && sed -i '/fips = fips_sect/s/^# //g' /usr/local/ssl/openssl.cnf \
-      && sed -i 's#\.include fipsmodule\.cnf#\.include /usr/local/ssl/fipsmodule.cnf#g' /usr/local/ssl/openssl.cnf
+COPY --chmod=0644 ${DOCKER_BUILD_DIR}/openssl.cnf /usr/local/ssl/openssl.cnf
 
 ### install packages
 RUN   apt-get update \
@@ -122,7 +120,7 @@ RUN groupadd --gid ${ZGID} ziggy \
 COPY --chmod=0755 --from=msgo /usr/local/bin/ziti /usr/local/bin/ziti
 
 RUN mkdir -p /usr/local/bin /etc/bash_completion.d
-RUN /usr/local/bin/ziti completion bash > /etc/bash_completion.d/ziti_cli
+# RUN /usr/local/bin/ziti completion bash > /etc/bash_completion.d/ziti_cli
 
 USER ziggy
 ENV HOME=${HOME}

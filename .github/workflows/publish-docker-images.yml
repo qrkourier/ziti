@@ -99,7 +99,7 @@ jobs:
           build-args: |
             ZITI_CLI_TAG=${{ env.ZITI_CLI_TAG }}
             ZITI_CLI_IMAGE=${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}
-            DOCKER_BUILD_DIR=./dist/docker-images/ziti-cli
+            DOCKER_BUILD_DIR=./dist/docker-images/ziti-cli-fips
           provenance: mode=max
           sbom: true
           push: true
@@ -165,7 +165,7 @@ jobs:
           build-args: |
             ZITI_CLI_TAG=${{ env.ZITI_CLI_TAG }}-fips
             ZITI_CLI_IMAGE=${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}
-            DOCKER_BUILD_DIR=./dist/docker-images/ziti-controller
+            DOCKER_BUILD_DIR=./dist/docker-images/ziti-controller-fips
           provenance: mode=max
           sbom: true
           push: true
@@ -231,7 +231,7 @@ jobs:
           build-args: |
             ZITI_CLI_TAG=${{ env.ZITI_CLI_TAG }}-fips
             ZITI_CLI_IMAGE=${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}
-            DOCKER_BUILD_DIR=./dist/docker-images/ziti-router
+            DOCKER_BUILD_DIR=./dist/docker-images/ziti-router-fips
           provenance: mode=max
           sbom: true
           push: true
