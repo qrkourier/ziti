@@ -93,7 +93,7 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ${{ github.workspace }}/
-          file: ${{ github.workspace }}/dist/docker-images/ziti-cli/fips.Dockerfile
+          file: ${{ github.workspace }}/dist/docker-images/ziti-cli-fips/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tagprep_cli_fips.outputs.DOCKER_TAGS }}
           build-args: |
@@ -159,7 +159,7 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ${{ github.workspace }}/
-          file: ${{ github.workspace }}/dist/docker-images/ziti-controller/Dockerfile
+          file: ${{ github.workspace }}/dist/docker-images/ziti-controller-fips/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tagprep_ctrl_fips.outputs.DOCKER_TAGS }}
           build-args: |
@@ -225,7 +225,7 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ${{ github.workspace }}/
-          file: ${{ github.workspace }}/dist/docker-images/ziti-router/Dockerfile
+          file: ${{ github.workspace }}/dist/docker-images/ziti-router-fips/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tagprep_router_fips.outputs.DOCKER_TAGS }}
           build-args: |
@@ -290,7 +290,7 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ${{ github.workspace }}/
-          file: ${{ github.workspace }}/dist/docker-images/ziti-tunnel/Dockerfile
+          file: ${{ github.workspace }}/dist/docker-images/ziti-tunnel-fips/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tagprep_tun_fips.outputs.DOCKER_TAGS }}
           build-args: |

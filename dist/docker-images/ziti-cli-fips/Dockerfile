@@ -90,7 +90,7 @@ RUN   case "${TARGETARCH}" in \
 # always use FIPS (sets the default openssl config to use the FIPS provider), also the config dir for the self-built openssl is /usr/local/ssl and NOT /etc/ssl
 RUN sed -i '/\.include fipsmodule\.cnf/s/^# //g' /usr/local/ssl/openssl.cnf \
       && sed -i '/fips = fips_sect/s/^# //g' /usr/local/ssl/openssl.cnf \
-      && sed -i 's#\.include fipsmodule\.cnf#\.include /usr/local/ssl/fipsmodule\.cnf#g' /usr/local/ssl/openssl.cnf
+      && sed -i 's#\.include fipsmodule\.cnf#\.include /usr/local/ssl/fipsmodule.cnf#g' /usr/local/ssl/openssl.cnf
 
 ### install packages
 RUN   apt-get update \
