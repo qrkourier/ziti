@@ -96,7 +96,7 @@ jobs:
         run: |
           set -eoxo pipefail
 
-          GO_LDFLAGS="$(go env GOPATH)/bin/ziti-ci -q go-build-flags -n)" | tee -a $GITHUB_OUTPUT
+          GO_LDFLAGS="$($(go env GOPATH)/bin/ziti-ci -q go-build-flags -n)" | tee -a $GITHUB_OUTPUT
 
       - name: Push FIPS CLI Image to Hub
         env:
