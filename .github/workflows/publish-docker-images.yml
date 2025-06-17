@@ -88,6 +88,9 @@ jobs:
           echo DOCKER_TAGS="${IMAGE_REPO}:${IMAGE_TAG}" | tee -a $GITHUB_OUTPUT
 
       - name: Push FIPS CLI Image to Hub
+        env:
+          IMAGE_REPO: ${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}
+          IMAGE_TAG: ${{ env.ZITI_CLI_TAG }}-fips
         uses: docker/build-push-action@v6
         id: push_cli_fips
         with:
@@ -100,6 +103,8 @@ jobs:
             ZITI_CLI_TAG=${{ env.ZITI_CLI_TAG }}
             ZITI_CLI_IMAGE=${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}
             DOCKER_BUILD_DIR=./dist/docker-images/ziti-cli-fips
+          cache-from: type=registry,ref=${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG}}-buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}-buildcache,mode=max
           provenance: mode=max
           sbom: true
           push: true
