@@ -74,9 +74,9 @@ LABEL name="openziti/ziti-cli" \
 
 USER root
 
-RUN echo "/usr/local/lib64" > /etc/ld.so.conf.d/openssl.conf \
-    && echo "/usr/local/lib" >> /etc/ld.so.conf.d/openssl.conf \
-    && ldconfig
+RUN   echo "/usr/local/lib64" > /etc/ld.so.conf.d/openssl.conf \
+      && echo "/usr/local/lib" >> /etc/ld.so.conf.d/openssl.conf \
+      && ldconfig
 COPY --from=openssl-fips /usr/local/ /usr/local/
 # generate openssl FIPS config and run self-tests (these are required to be compliant)
 RUN   case "${TARGETARCH}" in \
@@ -89,6 +89,7 @@ RUN   case "${TARGETARCH}" in \
 
 # always use FIPS (sets the default openssl config to use the FIPS provider), also the config dir for the self-built openssl is /usr/local/ssl and NOT /etc/ssl
 COPY --chmod=0644 ${DOCKER_BUILD_DIR}/openssl.cnf /usr/local/ssl/openssl.cnf
+ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
 
 ### install packages
 RUN   apt-get update \
