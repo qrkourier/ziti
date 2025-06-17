@@ -19,10 +19,13 @@ RUN curl -L -o openssl.tar.gz https://github.com/openssl/openssl/releases/downlo
     && tar --strip-components=1 -xzf openssl.tar.gz
 
 # disable the aflag test because it doesn't work on qemu (aka cross compile, see https://github.com/openssl/openssl/pull/17945)
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-            ./Configure ${OPENSSL_BUILD_CONFIGURE_ARGS} && make -j"$(nproc)" && make -j"$(nproc)" test TESTS="-test_afalg"; \
+RUN PROC_COUNT=$(nproc); \
+    JOBS=1; \
+    if [ "$PROC_COUNT" -gt 1 ]; then JOBS=$(expr "$PROC_COUNT" - 1); fi; \
+    if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+            ./Configure ${OPENSSL_BUILD_CONFIGURE_ARGS} && make -j"$JOBS" && make -j"$JOBS" test TESTS="-test_afalg"; \
       else \
-            ./Configure ${OPENSSL_BUILD_CONFIGURE_ARGS} && make -j"$(nproc)"; \
+            ./Configure ${OPENSSL_BUILD_CONFIGURE_ARGS} && make -j"$JOBS"; \
       fi
 
 RUN make install_sw install_ssldirs install_fips
