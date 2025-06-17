@@ -96,7 +96,7 @@ jobs:
         run: |
           set -eoxo pipefail
 
-          GO_LDFLAGS="$($(go env GOPATH)/bin/ziti-ci -q go-build-flags -n)" | tee -a $GITHUB_OUTPUT
+          echo GO_LDFLAGS="$($(go env GOPATH)/bin/ziti-ci -q go-build-flags -n)" | tee -a $GITHUB_OUTPUT
 
       - name: Push FIPS CLI Image to Hub
         env:
@@ -114,7 +114,7 @@ jobs:
             ZITI_CLI_TAG=${{ env.ZITI_CLI_TAG }}
             ZITI_CLI_IMAGE=${{ env.REGISTRY }}/${{ env.ZITI_CLI_IMAGE }}
             DOCKER_BUILD_DIR=./dist/docker-images/ziti-cli-fips
-            GO_LDFLAGS="${{ steps.go_ldflags.outputs.GO_LDFLAGS }}"
+            GO_LDFLAGS=${{ steps.go_ldflags.outputs.GO_LDFLAGS }}
           cache-from: type=registry,ref=${{ env.IMAGE_REPO }}-buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_REPO }}-buildcache,mode=max
           provenance: mode=max
