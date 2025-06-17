@@ -77,9 +77,8 @@ LABEL name="openziti/ziti-cli" \
 
 USER root
 
-RUN   echo "/usr/local/lib64" > /etc/ld.so.conf.d/openssl.conf \
-      && echo "/usr/local/lib" >> /etc/ld.so.conf.d/openssl.conf \
-      && ldconfig
+# Set LD_LIBRARY_PATH to ensure custom OpenSSL is used, no need for ldconfig
+ENV LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib"
 COPY --from=openssl-fips /usr/local/ /usr/local/
 # generate openssl FIPS config and run self-tests (these are required to be compliant)
 RUN   case "${TARGETARCH}" in \
@@ -87,8 +86,8 @@ RUN   case "${TARGETARCH}" in \
             arm64) LIB_DIR=/usr/local/lib ;; \
             *) echo $TARGETARCH; exit 2 ;; \
       esac; \
-      ldconfig "${LIB_DIR}" \
-      && /usr/local/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module "${LIB_DIR}/ossl-modules/fips.so"
+      /usr/local/bin/openssl version -a \
+      && /usr/local/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module "$LIB_DIR/ossl-modules/fips.so"
 
 # always use FIPS (sets the default openssl config to use the FIPS provider), also the config dir for the self-built openssl is /usr/local/ssl and NOT /etc/ssl
 COPY --chmod=0644 ${DOCKER_BUILD_DIR}/openssl.cnf /usr/local/ssl/openssl.cnf
