@@ -284,8 +284,7 @@ jobs:
           # dry run to build release tarball we'll use to double-check the internal version matches the tag
           $(go env GOPATH)/bin/ziti-ci publish-to-github --use-current-tag --prerelease --archive-base "" --dry-run
 
-          # if we decide to bundle the FIPS build into the release tarball, we need to target this extraction to accomodate the nested path
-          # tar xfzv ./release/ziti-linux-amd64-* ziti/ziti -C /tmp --strip-components=1
+          # extract the release tarball and verify the internal version matches the tag
           tar xfzv ./release/ziti-linux-amd64-* -C /tmp
 
           $(go env GOPATH)/bin/ziti-ci verify-current-version --use-current-tag "$(/tmp/ziti version)"
@@ -329,3 +328,18 @@ jobs:
     secrets: inherit
     with:
       ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
+
+  repository-dispatch:
+    name: Trigger Repository Dispatch
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Trigger repository_dispatch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/:owner/:repo/dispatches \
+            -f event_type=ziti_repository_dispatch \
+            -f client_payload='{
+              "version":"${{ needs.publish.outputs.ZITI_VERSION }}",
+              "run_id":"${{ github.run_id }}"
+            }'
