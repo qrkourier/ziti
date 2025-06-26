@@ -354,7 +354,8 @@ jobs:
             /repos/netfoundry/ziti-fips/dispatches \
             -f "event_type=ziti_repository_dispatch" \
             -F "client_payload[version]=${SEMVER}" \
-            -F "client_payload[run_id]=${{ github.run_id }}"
+            -F "client_payload[run_id]=${{ github.run_id }}" \
+            -F "client_payload[repo]=${{ github.repository }}"
             #
             # TODO: use the parsed version when it's available from the needed publish job
             # -F "client_payload[version]=${{ needs.publish.outputs.ZITI_VERSION }}" \
