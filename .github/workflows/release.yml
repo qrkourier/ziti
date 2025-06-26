@@ -330,9 +330,15 @@ jobs:
       ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   repository-dispatch:
+    # if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    # needs:
+    #   - call-publish-docker-images
     name: Trigger Repository Dispatch
     runs-on: ubuntu-24.04
     steps:
+      - name: Git Checkout
+        uses: actions/checkout@v4
+
       - name: Trigger repository_dispatch
         env:
           # this token has fine-grained permission to send repository_dispatch events to the downstream private repo
