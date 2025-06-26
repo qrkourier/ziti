@@ -330,9 +330,9 @@ jobs:
       ziti-version: ${{ needs.publish.outputs.ZITI_VERSION }}
 
   repository-dispatch:
-    # if: ${{ !cancelled() && needs.publish.result == 'success' }}
-    # needs:
-    #   - call-publish-docker-images
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    needs:
+      - call-publish-docker-images
     name: Trigger Repository Dispatch
     runs-on: ubuntu-24.04
     steps:
@@ -345,17 +345,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_FGPAT_NF_REPO_DISPATCH }}
         shell: bash
         run: |
-          # TODO: temp version until needed publish job is available
-          SEMVER=${GITHUB_REF_NAME#v}
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/netfoundry/ziti-fips/dispatches \
             -f "event_type=ziti_repository_dispatch" \
-            -F "client_payload[version]=${SEMVER}" \
+            -F "client_payload[version]=${{ needs.publish.outputs.ZITI_VERSION }}" \
             -F "client_payload[run_id]=${{ github.run_id }}" \
             -F "client_payload[repo]=${{ github.repository }}"
-            #
-            # TODO: use the parsed version when it's available from the needed publish job
-            # -F "client_payload[version]=${{ needs.publish.outputs.ZITI_VERSION }}" \
