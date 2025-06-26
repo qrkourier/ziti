@@ -332,6 +332,7 @@ jobs:
   repository-dispatch:
     if: ${{ !cancelled() && needs.publish.result == 'success' }}
     needs:
+      - publish
       - call-publish-docker-images
     name: Trigger Repository Dispatch
     runs-on: ubuntu-24.04
