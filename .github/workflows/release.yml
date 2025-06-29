@@ -343,6 +343,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_FGPAT_NF_REPO_DISPATCH }}
         shell: bash
         run: |
+          set -o pipefail
+          set -o xtrace
+
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \

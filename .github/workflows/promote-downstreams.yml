@@ -166,7 +166,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_FGPAT_NF_REPO_DISPATCH }}
         shell: bash
         run: |
-          gh --repo "${GITHUB_REPOSITORY}" api \
+          set -o pipefail
+          set -o xtrace
+
+          gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
