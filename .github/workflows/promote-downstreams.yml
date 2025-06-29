@@ -56,17 +56,16 @@ jobs:
   # the purpose of this job is to enforce that the Git ref promoted is a semver eligible for stable release, i.e., not having a semver pre-release suffix; the extracted version without the leading 'v' is passed to the docker job as the container image tag
   parse_version:
     needs: wait_for_release
-    name: Parse Release Version
+    name: Parse Tag Regex
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.parse.outputs.version }}
     steps:
-      - name: Parse Release Version
+      - name: Parse the Semantic Version from the Tag
         id: parse
         shell: bash
         run: |
           if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "${GITHUB_REF_NAME} is a semver release ref"
             echo "version=${GITHUB_REF_NAME#v}" | tee -a $GITHUB_OUTPUT
           else
             echo "${GITHUB_REF_NAME} is not a semver release ref" >&2
