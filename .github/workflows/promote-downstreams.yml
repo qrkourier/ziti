@@ -114,7 +114,7 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_API_TOKEN }}
 
       - name: Tag Latest
-        if: inputs.highest == 'true'
+        if: needs.parse_version.outputs.highest == 'true'
         shell: bash
         run: >
           docker buildx imagetools create --tag
