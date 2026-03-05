@@ -63,6 +63,7 @@ makePki() {
       echo "ERROR: root CA key not found: ${_src_ca_key}" >&2
       return 1
     fi
+    mkdir -p "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}"
     cp -RT "${ZITI_CLUSTER_NODE_PKI}/${ZITI_CA_FILE}" "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}"
     if [[ ! -s "${ZITI_PKI_SIGNER_CERT}" && ! -s "${ZITI_PKI_SIGNER_KEY}" ]]; then
       ziti pki create intermediate \
