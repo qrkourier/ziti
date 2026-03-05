@@ -7,12 +7,24 @@ set -o nounset
 set -o pipefail
 set -o xtrace
 
+JOINER_PIDS=()
+JOINER_HOMES=()
+
 cleanup(){
     if ! (( I_AM_ROBOT ))
     then
         echo "WARNING: destroying all controller and router state files in 30s; set I_AM_ROBOT=1 to suppress this message" >&2
         sleep 30
     fi
+    # stop joiner controllers started as background processes
+    for pid in "${JOINER_PIDS[@]}"; do
+        kill "${pid}" 2>/dev/null || true
+        wait "${pid}" 2>/dev/null || true
+    done
+    for home in "${JOINER_HOMES[@]}"; do
+        sudo rm -rf "${home}"
+    done
+    sudo rm -rf "${TMPDIR}/ctrl1-pki"
     for SVC in ziti-{router,controller}.service
     do
     (set +e
@@ -53,8 +65,8 @@ portcheck(){
 
 checkCommand() {
     if ! command -v "$1" &>/dev/null; then
-        logError "this script requires command '$1'. Please install on the search PATH and try again."
-        $1
+        echo "ERROR: this script requires command '$1'. Please install on the search PATH and try again." >&2
+        return 1
     fi
 }
 
@@ -71,8 +83,8 @@ done
 : "${ZITI_GO_VERSION:=$(grep -E '^go \d+\.\d*' "./go.mod" | cut -d " " -f2)}"
 : "${ZITI_PWD:=ziggypw}"
 : "${TMPDIR:=$(mktemp -d)}"
-: "${ZITI_CTRL_ADVERTISED_ADDRESS:="ctrl1.127.0.0.1.sslip.io"}"
-: "${ZITI_CTRL_ADVERTISED_PORT:="12801"}"
+: "${ZITI_CTRL_ADVERTISED_ADDRESS:="ziti-controller1.127.0.0.1.sslip.io"}"
+: "${ZITI_CTRL_ADVERTISED_PORT:="1281"}"
 : "${ZITI_BOOTSTRAP:=true}"
 : "${ZITI_BOOTSTRAP_CLUSTER:=true}"
 : "${ZITI_BOOTSTRAP_CONSOLE:=true}"
@@ -104,7 +116,7 @@ ZITI_CONSOLE_LOCATION
 
 cleanup
 
-for PORT in "${ZITI_CTRL_ADVERTISED_PORT}" "${ZITI_ROUTER_PORT}"
+for PORT in "${ZITI_CTRL_ADVERTISED_PORT}" 1282 1283 "${ZITI_ROUTER_PORT}"
 do
     portcheck "${PORT}"
 done
@@ -181,6 +193,78 @@ if (( ! ATTEMPTS )); then
     echo "ERROR: controller login did not succeed" >&2
     exit 1
 fi
+
+# --- Bootstrap and join controller nodes 2 and 3 ---
+CTRL1_PKI="${TMPDIR}/ctrl1-pki"
+sudo cp -R /var/lib/ziti-controller/pki "${CTRL1_PKI}"
+sudo chmod -R a+rX "${CTRL1_PKI}"
+
+for i in 2 3; do
+    JOINER_NAME="ziti-controller${i}"
+    JOINER_PORT="128${i}"
+    JOINER_ADDR="${JOINER_NAME}.127.0.0.1.sslip.io"
+    JOINER_HOME="${TMPDIR}/${JOINER_NAME}"
+
+    mkdir -p "${JOINER_HOME}"
+    JOINER_HOMES+=("${JOINER_HOME}")
+
+    # bootstrap PKI and config in a subshell to isolate fd and trap side effects
+    (
+        export ZITI_HOME="${JOINER_HOME}"
+        export ZITI_BOOTSTRAP=true
+        export ZITI_BOOTSTRAP_PKI=true
+        export ZITI_BOOTSTRAP_CONFIG=true
+        export ZITI_BOOTSTRAP_DATABASE=true
+        export ZITI_BOOTSTRAP_CLUSTER=false
+        export ZITI_CLUSTER_NODE_PKI="${CTRL1_PKI}"
+        export ZITI_CTRL_ADVERTISED_ADDRESS="${JOINER_ADDR}"
+        export ZITI_CTRL_ADVERTISED_PORT="${JOINER_PORT}"
+        export ZITI_CLUSTER_NODE_NAME="${JOINER_NAME}"
+        export ZITI_AUTO_RENEW_CERTS=true
+        export DEBUG=1
+
+        source /opt/openziti/etc/controller/bootstrap.bash
+        bootstrap config.yml
+    )
+
+    # start the joiner controller in the background
+    ziti controller run "${JOINER_HOME}/config.yml" &
+    JOINER_PIDS+=($!)
+
+    # wait for the joiner's agent to be ready
+    ATTEMPTS=30
+    DELAY=1
+    while ((ATTEMPTS)); do
+        if ziti agent stats --pid "${JOINER_PIDS[-1]}" >/dev/null 2>&1; then
+            break
+        fi
+        (( ATTEMPTS-- ))
+        sleep ${DELAY}
+    done
+    if (( ! ATTEMPTS )); then
+        echo "ERROR: ${JOINER_NAME} agent did not become available" >&2
+        exit 1
+    fi
+
+    # join the existing cluster from the new node
+    ziti agent cluster add --pid "${JOINER_PIDS[-1]}" \
+        "tls:${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"
+
+    echo "INFO: ${JOINER_NAME} joined the cluster"
+done
+
+# verify the cluster has 3 members
+_ctrl_pid="$(systemctl show -p MainPID --value ziti-controller.service)"
+CLUSTER_SIZE="$(sudo nsenter --target "${_ctrl_pid}" --mount -- \
+    ziti agent cluster list --pid "${_ctrl_pid}" 2>/dev/null | grep -c 'CONNECTED\|LEADER')" || true
+if (( CLUSTER_SIZE < 3 )); then
+    echo "ERROR: expected 3 cluster members, found ${CLUSTER_SIZE}" >&2
+    sudo nsenter --target "${_ctrl_pid}" --mount -- \
+        ziti agent cluster list --pid "${_ctrl_pid}" >&2
+    exit 1
+fi
+echo "INFO: cluster has ${CLUSTER_SIZE} members"
+
 ziti edge create edge-router "${ZITI_ROUTER_NAME}" -to "${ZITI_ENROLL_TOKEN}"
 
 if [[ -z "${ZITI_ENROLL_TOKEN:-}" || ! -s "${ZITI_ENROLL_TOKEN}" ]]; then

@@ -51,9 +51,30 @@ makePki() {
   elif [[ -z "${ZITI_CLUSTER_NODE_PKI:-}" && "${ZITI_BOOTSTRAP_CLUSTER}" == false ]]; then
     echo "DEBUG: not generating new cluster PKI because ZITI_BOOTSTRAP_CLUSTER=false and not installing new node PKI because ZITI_CLUSTER_NODE_PKI is not set" >&3
   else
-    # install the provided intermediate signing cert in this node's PKI root
-    echo "DEBUG: installing new node PKI from ZITI_CLUSTER_NODE_PKI=${ZITI_CLUSTER_NODE_PKI}" >&3
-    cp -RT "${ZITI_CLUSTER_NODE_PKI}" "${ZITI_PKI_ROOT}"
+    # install the root CA from the provided PKI directory and create a new intermediate for this node
+    echo "DEBUG: installing root CA from ZITI_CLUSTER_NODE_PKI=${ZITI_CLUSTER_NODE_PKI}" >&3
+    local _src_ca_cert="${ZITI_CLUSTER_NODE_PKI}/${ZITI_CA_FILE}/certs/${ZITI_CA_FILE}.cert"
+    local _src_ca_key="${ZITI_CLUSTER_NODE_PKI}/${ZITI_CA_FILE}/keys/${ZITI_CA_FILE}.key"
+    if [[ ! -s "${_src_ca_cert}" ]]; then
+      echo "ERROR: root CA cert not found: ${_src_ca_cert}" >&2
+      return 1
+    fi
+    if [[ ! -s "${_src_ca_key}" ]]; then
+      echo "ERROR: root CA key not found: ${_src_ca_key}" >&2
+      return 1
+    fi
+    cp -RT "${ZITI_CLUSTER_NODE_PKI}/${ZITI_CA_FILE}" "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}"
+    if [[ ! -s "${ZITI_PKI_SIGNER_CERT}" && ! -s "${ZITI_PKI_SIGNER_KEY}" ]]; then
+      ziti pki create intermediate \
+        --pki-root "${ZITI_PKI_ROOT}" \
+        --ca-name "${ZITI_CA_FILE}" \
+        --intermediate-file "${ZITI_INTERMEDIATE_FILE}"
+    elif [[ ! -s "${ZITI_PKI_SIGNER_CERT}" || ! -s "${ZITI_PKI_SIGNER_KEY}" ]]; then
+      echo "ERROR: ${ZITI_PKI_SIGNER_CERT} and ${ZITI_PKI_SIGNER_KEY} must both exist or neither exist as non-empty files" >&2
+      return 1
+    else
+      echo "INFO: intermediate CA exists in $(realpath "${ZITI_PKI_SIGNER_CERT}")"
+    fi
   fi
 
   issueLeafCerts
@@ -292,12 +313,11 @@ promptCtrlAddress() {
 
 promptClusterNodePki(){
   if [[ "${ZITI_BOOTSTRAP_CLUSTER:-}" == false && -z "${ZITI_CLUSTER_NODE_PKI:-}" ]]; then
-    echo -e "\nThe PKI directory must contain:"\
-            "\n\t${ZITI_CA_CERT}"\
-            "\n\t${ZITI_PKI_SIGNER_CERT}"\
-            "\n\t${ZITI_PKI_SIGNER_KEY}"\
+    echo -e "\nThe PKI directory must contain the root CA cert and key:"\
+            "\n\t${ZITI_CA_FILE}/certs/${ZITI_CA_FILE}.cert"\
+            "\n\t${ZITI_CA_FILE}/keys/${ZITI_CA_FILE}.key"\
             "\n"
-    if ZITI_CLUSTER_NODE_PKI="$(prompt  "Enter the path to the new cluster node's PKI directory: " )"; then
+    if ZITI_CLUSTER_NODE_PKI="$(prompt "Enter the path to the existing cluster's PKI directory: " )"; then
       setAnswer "ZITI_CLUSTER_NODE_PKI=${ZITI_CLUSTER_NODE_PKI}" "${BOOT_ENV_FILE}"
     else
       echo "ERROR: missing ZITI_CLUSTER_NODE_PKI in ${BOOT_ENV_FILE}; required for joining an existing cluster" >&2
