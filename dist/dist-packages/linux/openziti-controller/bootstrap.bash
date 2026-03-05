@@ -63,8 +63,10 @@ makePki() {
       echo "ERROR: root CA key not found: ${_src_ca_key}" >&2
       return 1
     fi
-    mkdir -p "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}"
-    cp -RT "${ZITI_CLUSTER_NODE_PKI}/${ZITI_CA_FILE}" "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}"
+    mkdir -p "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/certs" \
+             "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/keys"
+    cp "${_src_ca_cert}" "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/certs/${ZITI_CA_FILE}.cert"
+    cp "${_src_ca_key}" "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/keys/${ZITI_CA_FILE}.key"
     if [[ ! -s "${ZITI_PKI_SIGNER_CERT}" && ! -s "${ZITI_PKI_SIGNER_KEY}" ]]; then
       ziti pki create intermediate \
         --pki-root "${ZITI_PKI_ROOT}" \
@@ -75,6 +77,12 @@ makePki() {
       return 1
     else
       echo "INFO: intermediate CA exists in $(realpath "${ZITI_PKI_SIGNER_CERT}")"
+    fi
+    # offline the root CA private key — the controller only needs its own intermediate to operate
+    local _local_ca_key="${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/keys/${ZITI_CA_FILE}.key"
+    if [[ -f "${_local_ca_key}" ]]; then
+      rm -f "${_local_ca_key}"
+      echo "INFO: removed root CA key from ${_local_ca_key} (no longer needed)" >&3
     fi
   fi
 
