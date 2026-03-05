@@ -63,10 +63,15 @@ makePki() {
       echo "ERROR: root CA key not found: ${_src_ca_key}" >&2
       return 1
     fi
-    mkdir -p "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/certs" \
-             "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/keys"
-    cp "${_src_ca_cert}" "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/certs/${ZITI_CA_FILE}.cert"
-    cp "${_src_ca_key}" "${ZITI_PKI_ROOT}/${ZITI_CA_FILE}/keys/${ZITI_CA_FILE}.key"
+    local _ca_dir="${ZITI_PKI_ROOT}/${ZITI_CA_FILE}"
+    mkdir -p "${_ca_dir}/certs" "${_ca_dir}/keys" "${_ca_dir}/crls"
+    cp "${_src_ca_cert}" "${_ca_dir}/certs/${ZITI_CA_FILE}.cert"
+    cp "${_src_ca_key}" "${_ca_dir}/keys/${ZITI_CA_FILE}.key"
+    # initialize CA index files required by ziti pki create intermediate
+    [[ -f "${_ca_dir}/index.txt" ]]      || touch "${_ca_dir}/index.txt"
+    [[ -f "${_ca_dir}/index.txt.attr" ]]  || touch "${_ca_dir}/index.txt.attr"
+    [[ -f "${_ca_dir}/serial" ]]          || echo "01" > "${_ca_dir}/serial"
+    [[ -f "${_ca_dir}/crlnumber" ]]       || echo "01" > "${_ca_dir}/crlnumber"
     if [[ ! -s "${ZITI_PKI_SIGNER_CERT}" && ! -s "${ZITI_PKI_SIGNER_KEY}" ]]; then
       ziti pki create intermediate \
         --pki-root "${ZITI_PKI_ROOT}" \
