@@ -159,7 +159,7 @@ done
 
 # verify the cluster has 3 members
 CLUSTER_OUTPUT="$(docker compose exec -T ziti-controller ziti agent cluster list 2>/dev/null)"
-CLUSTER_SIZE="$(echo "${CLUSTER_OUTPUT}" | grep -c 'CONNECTED\|LEADER')" || true
+CLUSTER_SIZE="$(echo "${CLUSTER_OUTPUT}" | grep -c 'tls:')" || true
 if (( CLUSTER_SIZE < 3 )); then
     echo "ERROR: expected 3 cluster members, found ${CLUSTER_SIZE}" >&2
     echo "${CLUSTER_OUTPUT}" >&2

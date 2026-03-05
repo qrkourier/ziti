@@ -227,8 +227,8 @@ for i in 2 3; do
         bootstrap config.yml
     )
 
-    # start the joiner controller in the background
-    ziti controller run "${JOINER_HOME}/config.yml" &
+    # start the joiner controller in the background (must run from ZITI_HOME for relative PKI paths)
+    (cd "${JOINER_HOME}" && exec ziti controller run config.yml) &
     JOINER_PIDS+=($!)
 
     # wait for the joiner's agent to be ready
@@ -256,7 +256,7 @@ done
 # verify the cluster has 3 members
 _ctrl_pid="$(systemctl show -p MainPID --value ziti-controller.service)"
 CLUSTER_SIZE="$(sudo nsenter --target "${_ctrl_pid}" --mount -- \
-    ziti agent cluster list --pid "${_ctrl_pid}" 2>/dev/null | grep -c 'CONNECTED\|LEADER')" || true
+    ziti agent cluster list --pid "${_ctrl_pid}" 2>/dev/null | grep -c 'tls:')" || true
 if (( CLUSTER_SIZE < 3 )); then
     echo "ERROR: expected 3 cluster members, found ${CLUSTER_SIZE}" >&2
     sudo nsenter --target "${_ctrl_pid}" --mount -- \
