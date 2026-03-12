@@ -531,6 +531,12 @@ bootstrap() {
     # If config doesn't exist, make PKI from scratch
     if ! [[ -s "${_ctrl_config_file}" ]]; then
       makePki
+      if isInteractive; then
+        echo -e "\nNOTE: The controller will automatically re-issue leaf certificates" \
+                "\n(client and server) at each startup. To disable this behavior, set:" \
+                "\n  ZITI_AUTO_RENEW_CERTS=false" \
+                "\nin /opt/openziti/etc/controller/service.env\n"
+      fi
     elif [[ "${ZITI_AUTO_RENEW_CERTS:-}" == true ]]; then
       issueLeafCerts
     fi
