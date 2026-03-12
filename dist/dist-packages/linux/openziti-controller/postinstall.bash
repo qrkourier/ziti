@@ -219,29 +219,20 @@ case "$action" in
   "upgrade")
     upgrade
     printf "\033[32m completed upgrade of openziti-controller\033[0m\n"
-    cat >&2 <<'NOTE'
-
-  ┌─────────────────────────────────────────────────────────────────┐
-  │ openziti-controller v2: new variables                           │
-  │                                                                 │
-  │ v2 introduces HA clustering support. If you plan to             │
-  │ re-bootstrap (ZITI_BOOTSTRAP_CONFIG=force), the following       │
-  │ new variables are available in bootstrap.env:                   │
-  │                                                                 │
-  │   ZITI_CLUSTER_TRUST_DOMAIN   shared trust domain for the       │
-  │                               cluster (required for clustering) │
-  │   ZITI_CLUSTER_NODE_NAME      unique name for this node         │
-  │   ZITI_BOOTSTRAP_CLUSTER      true = new cluster, false = join  │
-  │                                                                 │
-  │ These are not required for standalone deployments. Running      │
-  │ bootstrap.bash interactively will prompt for any missing values.│
-  │                                                                 │
-  │ To review the updated template:                                 │
-  │   cat /opt/openziti/etc/controller/bootstrap.env.dpkg-new       │
-  │ or compare with your current file:                              │
-  │   diff /opt/openziti/etc/controller/bootstrap.env{,.dpkg-new}   │
-  └─────────────────────────────────────────────────────────────────┘
-
-NOTE
     ;;
 esac
+
+# If stdin is a TTY and the controller has no config yet, offer to run
+# bootstrap interactively. This fires on fresh install and on upgrade if
+# config.yml was deleted.
+if [[ -t 0 ]] && [[ ! -f "${STATE_DIR}/config.yml" ]]; then
+  read -r -p "Configure ziti-controller now? [Y/n]: " _answer
+  case "${_answer,,}" in
+    n|no)
+      echo "Run /opt/openziti/etc/controller/bootstrap.bash when ready."
+      ;;
+    *)
+      exec /opt/openziti/etc/controller/bootstrap.bash
+      ;;
+  esac
+fi

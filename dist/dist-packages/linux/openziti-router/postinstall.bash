@@ -221,3 +221,18 @@ case "$action" in
     printf "\033[32m completed upgrade of openziti-router\033[0m\n"
     ;;
 esac
+
+# If stdin is a TTY and the router has no config yet, offer to run
+# bootstrap interactively. This fires on fresh install and on upgrade if
+# config.yml was deleted.
+if [[ -t 0 ]] && [[ ! -f "${STATE_DIR}/config.yml" ]]; then
+  read -r -p "Configure ziti-router now? [Y/n]: " _answer
+  case "${_answer,,}" in
+    n|no)
+      echo "Run /opt/openziti/etc/router/bootstrap.bash when ready."
+      ;;
+    *)
+      exec /opt/openziti/etc/router/bootstrap.bash
+      ;;
+  esac
+fi

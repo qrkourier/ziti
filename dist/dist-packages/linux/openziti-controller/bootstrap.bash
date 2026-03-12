@@ -871,6 +871,17 @@ else
     echo -e "INFO: bootstrap completed successfully and will not run again."\
             "Adjust ${ZITI_HOME}/config.yml to suit." >&2
     trap - EXIT  # remove exit trap
+
+    # On Linux with systemd, enable and start the service if not already running
+    if [[ -d /run/systemd/system ]]; then
+      if ! systemctl is-enabled --quiet ziti-controller.service 2>/dev/null; then
+        systemctl enable ziti-controller.service
+      fi
+      if ! systemctl is-active --quiet ziti-controller.service 2>/dev/null; then
+        systemctl start ziti-controller.service
+      fi
+      systemctl status --no-pager ziti-controller.service >&2 || true
+    fi
   else
     echo "ERROR: something went wrong during bootstrapping" >&2
   fi
