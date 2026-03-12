@@ -321,6 +321,49 @@ verify_readme_breadcrumb() {
   fi
 }
 
+# verify_traffic [--prefix <prefix>]
+# End-to-end data plane verification using "ziti ops verify traffic".
+# Requires a prior "ziti edge login" in the same session. On the first call,
+# uses --cleanup to create test resources; subsequent calls reuse them via the
+# same --prefix, and the final call (or ERR trap) should clean up.
+VERIFY_TRAFFIC_COUNT=0
+verify_traffic() {
+  local _prefix="install-test"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --prefix) _prefix="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  VERIFY_TRAFFIC_COUNT=$(( VERIFY_TRAFFIC_COUNT + 1 ))
+  log_section "Verify traffic #${VERIFY_TRAFFIC_COUNT}"
+
+  # First attempt: quiet retries (transient failures during cluster convergence)
+  if retry 3 5 "${ZITI_BIN}" ops verify traffic \
+      --timeout 11 \
+      --prefix "${_prefix}" \
+      --yes \
+      --cleanup; then
+    log_info "traffic OK (#${VERIFY_TRAFFIC_COUNT})"
+    return 0
+  fi
+
+  # Second attempt: verbose for diagnostics
+  if "${ZITI_BIN}" ops verify traffic \
+      --timeout 11 \
+      --prefix "${_prefix}" \
+      --yes \
+      --cleanup \
+      --verbose; then
+    log_info "traffic OK (#${VERIFY_TRAFFIC_COUNT}, retry)"
+    return 0
+  fi
+
+  log_error "traffic FAILED (#${VERIFY_TRAFFIC_COUNT})"
+  return 1
+}
+
 # --- nspawn container management ---
 
 # Global state for nspawn containers (initialized by nspawn_ensure_deps)

@@ -157,6 +157,10 @@ login_cmd="${ZITI_BIN} edge login ${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_AD
 retry 10 3 ${login_cmd}
 
 log_section "Phase 2: Bootstrap v1 router"
+# Create default policies so routers can serve traffic for verify_traffic
+"${ZITI_BIN}" edge create edge-router-policy default --edge-router-roles '#all' --identity-roles '#all'
+"${ZITI_BIN}" edge create service-edge-router-policy default --edge-router-roles '#all' --service-roles '#all'
+
 "${ZITI_BIN}" edge create edge-router "${ZITI_ROUTER_NAME}" -to "${ZITI_ENROLL_TOKEN_FILE}"
 
 if [[ ! -s "${ZITI_ENROLL_TOKEN_FILE}" ]]; then
@@ -189,6 +193,10 @@ wait_for_service ziti-router.service 60
 
 retry 10 3 bash -c "[[ \$($ZITI_BIN edge list edge-routers -j | jq \".data[0].isOnline\") == \"true\" ]]"
 log_info "v1 router is online"
+
+# NOTE: verify_traffic is skipped on v1 — the v1 ziti binary does not support
+# 'ops verify traffic' (or lacks --yes/session reuse), causing TTY prompts
+# that fail in non-interactive mode.  We verify traffic after the v2 upgrade.
 
 # ============================================================
 # Phase 3: Create test state that must survive the upgrade
@@ -280,6 +288,9 @@ wait_for_service ziti-router.service 20
 
 retry 10 3 bash -c "[[ \$($ZITI_BIN edge list edge-routers -j | jq \".data[0].isOnline\") == \"true\" ]]"
 log_pass "router is online after upgrade"
+
+# Verify data plane works on v2 after upgrade
+verify_traffic --prefix upgrade-test-v2
 
 # Verify test state survived the upgrade
 _erp_count=$("${ZITI_BIN}" edge list edge-router-policies -j 'name="upgrade-test-erp"' | jq '.data | length')

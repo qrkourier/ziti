@@ -132,6 +132,10 @@ login_cmd="${ZITI_BIN} edge login ${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_AD
 # shellcheck disable=SC2086  # intentional word splitting for retry args
 retry 10 3 ${login_cmd}
 
+# Create default policies so routers can serve traffic for verify_traffic
+"${ZITI_BIN}" edge create edge-router-policy default --edge-router-roles '#all' --identity-roles '#all'
+"${ZITI_BIN}" edge create service-edge-router-policy default --edge-router-roles '#all' --service-roles '#all'
+
 "${ZITI_BIN}" edge create edge-router "${ZITI_ROUTER_NAME}" -to "${ZITI_ENROLL_TOKEN}"
 
 if [[ -z "${ZITI_ENROLL_TOKEN:-}" || ! -s "${ZITI_ENROLL_TOKEN}" ]]; then
@@ -153,6 +157,9 @@ wait_for_service ziti-router.service 20
 
 retry 10 3 bash -c "[[ \$($ZITI_BIN edge list edge-routers -j | jq \".data[0].isOnline\") == \"true\" ]]"
 log_info "router is online"
+
+# First scaling event: ctrl1 + rtr1
+verify_traffic
 
 # --- Cluster expansion with nspawn containers ---
 #
@@ -252,6 +259,9 @@ _expand_cluster() {
     retry 10 3 bash -c "[[ \$(${ZITI_BIN} edge list edge-routers -j 'name=\"${_rtr_name}\"' \
       | jq -r '.data[0].isOnline') == 'true' ]]"
     log_info "${_rtr_name} is online"
+
+    # Verify traffic after each scaling event
+    verify_traffic
   done
 
   # Verify full cluster
@@ -266,18 +276,6 @@ _expand_cluster() {
 _expand_cluster
 
 # --- End cluster expansion ---
-
-export \
-ZITI_CTRL_EDGE_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS} \
-ZITI_CTRL_EDGE_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
-
-_test_result=$(go test -v -count=1 -tags="quickstart manual" ./ziti/run/...)
-
-# check for failure modes that don't result in an error exit code
-if [[ "${_test_result}" =~ "no tests to run" ]]; then
-    log_error "test failed because no tests to run"
-    exit 1
-fi
 
 # verify console is available
 log_section "Verifying console"
