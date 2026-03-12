@@ -321,6 +321,175 @@ verify_readme_breadcrumb() {
   fi
 }
 
+# --- nspawn container management ---
+
+# Global state for nspawn containers (initialized by nspawn_ensure_deps)
+NSPAWN_DIR=""
+NSPAWN_CONTAINERS=()
+
+# Install mmdebstrap and systemd-container if not present, start machined.
+nspawn_ensure_deps() {
+  if ! command -v mmdebstrap &>/dev/null || ! command -v systemd-nspawn &>/dev/null; then
+    log_info "installing mmdebstrap and systemd-container"
+    sudo apt-get update </dev/null
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mmdebstrap systemd-container </dev/null
+  fi
+  sudo systemctl start systemd-machined.service || true
+  NSPAWN_DIR="$(mktemp -d)"
+  log_info "nspawn working directory: ${NSPAWN_DIR}"
+}
+
+# nspawn_create_base <base_dir> <deb_dir>
+# Create a minimal rootfs with mmdebstrap and install ziti .deb packages.
+# The OS layer (mmdebstrap + systemd + dbus) is cached as a tarball for fast
+# reuse. Our .deb packages are always installed fresh on top.
+#
+# Cache location: NSPAWN_CACHE_DIR (default: /var/cache/openziti-test)
+# Cache key: nspawn-base-<codename>.tar
+# CI: use actions/cache to persist the cache directory between runs
+: "${NSPAWN_CACHE_DIR:=/var/cache/openziti-test}"
+
+nspawn_create_base() {
+  local _base_dir="$1" _deb_dir="$2"
+  local _codename
+  # shellcheck source=/etc/os-release
+  _codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+  local _cache_tar="${NSPAWN_CACHE_DIR}/nspawn-base-${_codename}.tar"
+
+  if [[ -f "${_cache_tar}" ]]; then
+    log_info "restoring cached OS rootfs from ${_cache_tar}"
+    sudo mkdir -p "${_base_dir}"
+    sudo tar xf "${_cache_tar}" -C "${_base_dir}"
+  else
+    log_info "creating base rootfs (${_codename}) in ${_base_dir}"
+    sudo mmdebstrap --variant=minbase --include=systemd,dbus \
+      "${_codename}" "${_base_dir}"
+
+    # Save the OS layer for future runs
+    sudo mkdir -p "${NSPAWN_CACHE_DIR}"
+    log_info "caching OS rootfs to ${_cache_tar}"
+    sudo tar cf "${_cache_tar}" -C "${_base_dir}" .
+  fi
+
+  # Copy .deb files into the rootfs (use /root/debs, not /tmp — nspawn mounts
+  # a private tmpfs on /tmp that hides files placed there from the host)
+  sudo mkdir -p "${_base_dir}/root/debs"
+  sudo cp "${_deb_dir}"/openziti_*.deb "${_deb_dir}"/openziti-{controller,router}_*.deb \
+    "${_base_dir}/root/debs/"
+
+  # Install packages inside (always fresh — debs change every build)
+  sudo systemd-nspawn -D "${_base_dir}" --pipe /bin/bash -euxc \
+    "dpkg --force-confnew -i /root/debs/openziti_*.deb && \
+     dpkg --force-confnew -i /root/debs/openziti-controller_*.deb /root/debs/openziti-router_*.deb" </dev/null
+
+  # Clean up debs
+  sudo rm -rf "${_base_dir}/root/debs"
+  log_info "base rootfs created"
+}
+
+# nspawn_clone <name>
+# Clone the base rootfs to a new container directory.
+nspawn_clone() {
+  local _name="$1"
+  log_info "cloning base rootfs to ${_name}"
+  sudo cp -a "${NSPAWN_DIR}/base" "${NSPAWN_DIR}/${_name}"
+}
+
+# nspawn_boot <name> [extra_nspawn_args...]
+# Boot a container in the background and wait for systemd to be ready.
+nspawn_boot() {
+  local _name="$1"
+  shift
+  log_info "booting container ${_name}"
+  # No --network-* flags: nspawn shares the host network by default.
+  # Each container uses unique ports to avoid conflicts.
+  sudo systemd-nspawn \
+    --boot \
+    --directory="${NSPAWN_DIR}/${_name}" \
+    --machine="${_name}" \
+    "$@" &
+  NSPAWN_CONTAINERS+=("${_name}")
+
+  # Wait for systemd to be ready inside (up to 60s)
+  local _deadline=$(( SECONDS + 60 ))
+  while (( SECONDS < _deadline )); do
+    local _state
+    _state="$(sudo systemd-run -M "${_name}" --wait --pipe --collect \
+      systemctl is-system-running 2>/dev/null)" || true
+    if [[ "${_state}" == "running" || "${_state}" == "degraded" ]]; then
+      log_info "container ${_name} is ready (${_state})"
+      return 0
+    fi
+    sleep 2
+  done
+  log_error "container ${_name} did not become ready within 60s"
+  return 1
+}
+
+# nspawn_exec <name> <cmd...>
+# Execute a command inside a running container.
+nspawn_exec() {
+  local _name="$1"
+  shift
+  sudo systemd-run -M "${_name}" --wait --pipe --collect "$@"
+}
+
+# nspawn_stop <name>
+# Poweroff or terminate a container.
+nspawn_stop() {
+  local _name="$1"
+  sudo machinectl poweroff "${_name}" 2>/dev/null \
+    || sudo machinectl terminate "${_name}" 2>/dev/null \
+    || true
+  # Wait briefly for the machine to disappear
+  local _deadline=$(( SECONDS + 15 ))
+  while (( SECONDS < _deadline )); do
+    if ! machinectl show "${_name}" &>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  log_warn "container ${_name} did not stop within 15s"
+}
+
+# nspawn_cleanup_all
+# Stop all tracked containers and remove the working directory.
+nspawn_cleanup_all() {
+  if [[ -z "${NSPAWN_DIR:-}" ]]; then
+    return 0
+  fi
+  log_info "cleaning up nspawn containers"
+  local _name
+  for _name in "${NSPAWN_CONTAINERS[@]+"${NSPAWN_CONTAINERS[@]}"}"; do
+    nspawn_stop "${_name}"
+  done
+  if [[ -d "${NSPAWN_DIR}" ]]; then
+    sudo rm -rf "${NSPAWN_DIR}"
+  fi
+  NSPAWN_CONTAINERS=()
+  NSPAWN_DIR=""
+}
+
+# Dump diagnostics for services inside an nspawn container.
+nspawn_dump_diagnostics() {
+  local _name="$1"
+  (
+    set +e
+    echo ""
+    echo "====== NSPAWN DIAGNOSTICS: ${_name} ======"
+    for _svc in ziti-controller.service ziti-router.service; do
+      echo "--- ${_name}: ${_svc} status ---"
+      sudo systemd-run -M "${_name}" --wait --pipe --collect \
+        systemctl status "${_svc}" --no-pager -l 2>&1 || true
+      echo "--- ${_name}: ${_svc} journal ---"
+      sudo systemd-run -M "${_name}" --wait --pipe --collect \
+        journalctl -xeu "${_svc}" --no-pager -n 100 2>&1 || true
+    done
+    echo "====== END NSPAWN DIAGNOSTICS: ${_name} ======"
+    echo ""
+  )
+}
+
 # --- Cleanup ---
 
 cleanup_service() {
@@ -348,9 +517,16 @@ cleanup_packages() {
 
 cleanup_all() {
   if [[ -t 0 ]]; then
-    echo "Purging openziti-controller and openziti-router packages and deleting /var/lib/ziti-controller/ and /var/lib/ziti-router/ in 30s. Re-run with </dev/null to skip this delay." >&2
+    local _msg="Purging openziti-controller and openziti-router packages and deleting /var/lib/ziti-controller/ and /var/lib/ziti-router/"
+    if [[ ${#NSPAWN_CONTAINERS[@]} -gt 0 ]]; then
+      _msg+="; stopping nspawn containers: ${NSPAWN_CONTAINERS[*]}"
+    fi
+    echo "${_msg} in 30s. Re-run with </dev/null to skip this delay." >&2
     sleep 30
   fi
+
+  # Clean up nspawn containers before host services
+  nspawn_cleanup_all
 
   local _console_dir="${ZITI_CONSOLE_LOCATION:-/opt/openziti/share/console}"
 

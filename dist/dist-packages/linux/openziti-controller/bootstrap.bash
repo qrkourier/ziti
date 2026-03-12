@@ -471,6 +471,11 @@ promptUser() {
 }
 
 promptPassword() {
+  # Joiners (ZITI_CLUSTER_NODE_PKI is set) don't need a password — they join
+  # an existing cluster where the admin user was already created.
+  if [[ -n "${ZITI_CLUSTER_NODE_PKI:-}" ]]; then
+    return 0
+  fi
   # prompt for password if database bootstrapping enabled and password not already set
   if [[ "${ZITI_BOOTSTRAP_DATABASE:-}" == true && -z "${ZITI_PWD:-}" ]]; then
     GEN_PWD=$(head -c128 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^*_+~' | cut -c 1-22)
@@ -574,7 +579,12 @@ bootstrap() {
 #   ZITI_USER_NAME - display name for default admin (default: "Default Admin")
 #
 clusterInit() {
-  # Only run if bootstrapping a new cluster
+  # Only run for new cluster leaders — joiners (ZITI_CLUSTER_NODE_PKI set) don't
+  # create admin users; they join an existing cluster where admin already exists.
+  if [[ -n "${ZITI_CLUSTER_NODE_PKI:-}" ]]; then
+    echo "DEBUG: skipping cluster init (joiner — ZITI_CLUSTER_NODE_PKI is set)" >&3
+    return 0
+  fi
   if [[ "${ZITI_BOOTSTRAP_CLUSTER:-}" != true && "${ZITI_BOOTSTRAP_DATABASE:-}" != true ]]; then
     echo "DEBUG: skipping cluster init (ZITI_BOOTSTRAP_CLUSTER=${ZITI_BOOTSTRAP_CLUSTER:-}, ZITI_BOOTSTRAP_DATABASE=${ZITI_BOOTSTRAP_DATABASE:-})" >&3
     return 0
@@ -592,29 +602,43 @@ clusterInit() {
   local _pid="${1:-}"
   local _output
   local _rc
+  local _attempts=10
+  local _delay=3
 
   echo "INFO: initializing cluster with default admin '${ZITI_USER}'"
 
-  set +o errexit
-  if [[ -n "${_pid}" ]]; then
-    _output="$(ziti agent cluster init --pid "${_pid}" "${ZITI_USER}" "${ZITI_PWD}" "${ZITI_USER_NAME}" 2>&1)"
-  else
-    _output="$(ziti agent cluster init "${ZITI_USER}" "${ZITI_PWD}" "${ZITI_USER_NAME}" 2>&1)"
-  fi
-  _rc=$?
-  set -o errexit
+  while (( _attempts-- )); do
+    set +o errexit
+    if [[ -n "${_pid}" ]]; then
+      _output="$(ziti agent cluster init --pid "${_pid}" "${ZITI_USER}" "${ZITI_PWD}" "${ZITI_USER_NAME}" 2>&1)"
+    else
+      _output="$(ziti agent cluster init "${ZITI_USER}" "${ZITI_PWD}" "${ZITI_USER_NAME}" 2>&1)"
+    fi
+    _rc=$?
+    set -o errexit
 
-  # Check result - treat "already initialized" as success for idempotency
-  if (( _rc == 0 )); then
-    echo "INFO: cluster initialized successfully"
-    return 0
-  elif [[ "${_output}" == *"already initialized"* ]]; then
-    echo "INFO: cluster was already initialized"
-    return 0
-  else
+    # Check result - treat "already initialized" as success for idempotency
+    if (( _rc == 0 )); then
+      echo "INFO: cluster initialized successfully"
+      return 0
+    elif [[ "${_output}" == *"already initialized"* ]]; then
+      echo "INFO: cluster was already initialized"
+      return 0
+    fi
+
+    # Retry on timeout — raft may still be initializing after the agent socket is ready
+    if [[ "${_output}" == *"timeout"* || "${_output}" == *"deadline exceeded"* ]] && (( _attempts > 0 )); then
+      echo "DEBUG: cluster init not ready, retrying in ${_delay}s (${_attempts} attempts left)" >&3
+      sleep "${_delay}"
+      continue
+    fi
+
     echo "ERROR: cluster initialization failed (exit ${_rc}): ${_output}" >&2
     return "${_rc}"
-  fi
+  done
+
+  echo "ERROR: cluster initialization timed out after all retries" >&2
+  return 1
 }
 
 # Wait for the controller agent to become available

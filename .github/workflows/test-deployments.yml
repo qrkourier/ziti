@@ -201,6 +201,16 @@ jobs:
           wget -qO- https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz | tar --directory ~/.local/bin -xz nfpm
           nfpm --version
 
+      - name: Install nspawn dependencies
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y mmdebstrap systemd-container
+
+      - name: Cache nspawn OS rootfs
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/openziti-test
+          key: nspawn-base-${{ hashFiles('/etc/os-release') }}
+
       - name: Run fresh install test
         shell: bash
         run: ./dist/dist-packages/linux/linux.install-test.bash

@@ -29,6 +29,11 @@ _err_handler() {
   # (errtrace causes this handler to fire inside $() subshells)
   dump_service_diagnostics ziti-controller.service >&2
   dump_service_diagnostics ziti-router.service >&2
+  # Dump nspawn container diagnostics if any are running
+  local _cname
+  for _cname in "${NSPAWN_CONTAINERS[@]+"${NSPAWN_CONTAINERS[@]}"}"; do
+    nspawn_dump_diagnostics "${_cname}" >&2
+  done
 }
 trap '_err_handler' ERR
 trap 'cleanup_all; exit $_exit_code' EXIT
@@ -53,11 +58,21 @@ done
 : "${ZITI_CLUSTER_NODE_NAME:=${ZITI_CTRL_ADVERTISED_ADDRESS%%.*}}"
 : "${ZITI_CLUSTER_TRUST_DOMAIN:=${ZITI_CTRL_ADVERTISED_ADDRESS#*.}}"
 : "${ZITI_ROUTER_PORT:="30223"}"
-: "${ZITI_ROUTER_NAME:="linux-router1"}"
+: "${ZITI_ROUTER_NAME:="ziti-router1"}"
 : "${ZITI_ROUTER_ADVERTISED_ADDRESS:="${ZITI_ROUTER_NAME}.127.0.0.1.sslip.io"}"
 : "${ZITI_ENROLL_TOKEN:="${TMPDIR}/${ZITI_ROUTER_NAME}.jwt"}"
 : "${ZITI_CONSOLE_LOCATION:="/opt/openziti/share/consoletest"}"
 : "${ZITI_USER:="admin"}"
+: "${ZITI_CTRL2_ADVERTISED_ADDRESS:="ziti-controller2.127.0.0.1.sslip.io"}"
+: "${ZITI_CTRL2_ADVERTISED_PORT:="1282"}"
+: "${ZITI_CTRL3_ADVERTISED_ADDRESS:="ziti-controller3.127.0.0.1.sslip.io"}"
+: "${ZITI_CTRL3_ADVERTISED_PORT:="1283"}"
+: "${ZITI_RTR2_NAME:="ziti-router2"}"
+: "${ZITI_RTR2_PORT:="30224"}"
+: "${ZITI_RTR2_ADVERTISED_ADDRESS:="${ZITI_RTR2_NAME}.127.0.0.1.sslip.io"}"
+: "${ZITI_RTR3_NAME:="ziti-router3"}"
+: "${ZITI_RTR3_PORT:="30225"}"
+: "${ZITI_RTR3_ADVERTISED_ADDRESS:="${ZITI_RTR3_NAME}.127.0.0.1.sslip.io"}"
 
 export \
 ZITI_GO_VERSION \
@@ -78,7 +93,9 @@ ZITI_CONSOLE_LOCATION
 
 cleanup_all
 
-for PORT in "${ZITI_CTRL_ADVERTISED_PORT}" "${ZITI_ROUTER_PORT}"; do
+for PORT in "${ZITI_CTRL_ADVERTISED_PORT}" "${ZITI_ROUTER_PORT}" \
+           "${ZITI_CTRL2_ADVERTISED_PORT}" "${ZITI_CTRL3_ADVERTISED_PORT}" \
+           "${ZITI_RTR2_PORT}" "${ZITI_RTR3_PORT}"; do
     check_port_available "${PORT}"
 done
 
@@ -136,6 +153,119 @@ wait_for_service ziti-router.service 20
 
 retry 10 3 bash -c "[[ \$($ZITI_BIN edge list edge-routers -j | jq \".data[0].isOnline\") == \"true\" ]]"
 log_info "router is online"
+
+# --- Cluster expansion with nspawn containers ---
+#
+# IMPORTANT: The cluster expansion runs inside a function called from the
+# script's top level so that `set -o errexit` is active. Placing this work
+# directly inside an `if` body would suppress errexit (bash spec), allowing
+# failures to be silently ignored.
+
+_expand_cluster() {
+  # Check whether nspawn deps are available (or can be installed).
+  # Return early with a warning if not — this is the only conditional
+  # guard, so all subsequent commands run with errexit active.
+  if ! command -v mmdebstrap &>/dev/null || ! command -v systemd-nspawn &>/dev/null; then
+    if ! { sudo apt-get update </dev/null && \
+           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mmdebstrap systemd-container </dev/null; }; then
+      log_warn "mmdebstrap/systemd-container not available — skipping cluster expansion test"
+      return 0
+    fi
+  fi
+
+  log_section "Expanding cluster with nspawn containers"
+
+  nspawn_ensure_deps
+  nspawn_create_base "${NSPAWN_DIR}/base" "${TMPDIR}"
+
+  for _node_idx in 2 3; do
+    _ctrl_name="ziti-controller${_node_idx}"
+    _ctrl_addr_var="ZITI_CTRL${_node_idx}_ADVERTISED_ADDRESS"
+    _ctrl_addr="${!_ctrl_addr_var}"
+    _ctrl_port_var="ZITI_CTRL${_node_idx}_ADVERTISED_PORT"
+    _ctrl_port="${!_ctrl_port_var}"
+    _rtr_name_var="ZITI_RTR${_node_idx}_NAME"
+    _rtr_name="${!_rtr_name_var}"
+    _rtr_addr_var="ZITI_RTR${_node_idx}_ADVERTISED_ADDRESS"
+    _rtr_addr="${!_rtr_addr_var}"
+    _rtr_port_var="ZITI_RTR${_node_idx}_PORT"
+    _rtr_port="${!_rtr_port_var}"
+    _container="${_ctrl_name}"
+
+    log_section "Bootstrapping ${_container} (${_ctrl_name} + ${_rtr_name})"
+
+    # Clone rootfs and copy primary's PKI
+    nspawn_clone "${_container}"
+    sudo mkdir -p "${NSPAWN_DIR}/${_container}/ctrl1-pki/root/certs" \
+                 "${NSPAWN_DIR}/${_container}/ctrl1-pki/root/keys"
+    sudo cp /var/lib/ziti-controller/pki/root/certs/root.cert \
+       "${NSPAWN_DIR}/${_container}/ctrl1-pki/root/certs/"
+    sudo cp /var/lib/ziti-controller/pki/root/keys/root.key \
+       "${NSPAWN_DIR}/${_container}/ctrl1-pki/root/keys/"
+
+    nspawn_boot "${_container}"
+
+    # Bootstrap joiner controller
+    nspawn_exec "${_container}" /bin/bash -euxc "
+      export ZITI_BOOTSTRAP=true
+      export ZITI_BOOTSTRAP_PKI=true
+      export ZITI_BOOTSTRAP_CONFIG=true
+      export ZITI_BOOTSTRAP_DATABASE=true
+      export ZITI_BOOTSTRAP_CLUSTER=false
+      export ZITI_CLUSTER_NODE_PKI=/ctrl1-pki
+      export ZITI_CLUSTER_NODE_NAME=${_ctrl_name}
+      export ZITI_CTRL_ADVERTISED_ADDRESS=${_ctrl_addr}
+      export ZITI_CTRL_ADVERTISED_PORT=${_ctrl_port}
+      DEBUG=1 /opt/openziti/etc/controller/bootstrap.bash </dev/null
+    "
+
+    # Start controller (joiner bootstrap does NOT start it)
+    nspawn_exec "${_container}" systemctl start ziti-controller.service
+
+    # Wait for controller port
+    wait_for_port "${_ctrl_addr}" "${_ctrl_port}" 30
+
+    # Join the cluster (retry — primary may not accept immediately)
+    retry 10 3 nspawn_exec "${_container}" \
+      /usr/bin/ziti agent cluster add "tls:${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"
+
+    # Create router on primary controller
+    "${ZITI_BIN}" edge create edge-router "${_rtr_name}" \
+      -to "${TMPDIR}/${_rtr_name}.jwt"
+    _jwt_content=$(<"${TMPDIR}/${_rtr_name}.jwt")
+
+    # Bootstrap router in container
+    nspawn_exec "${_container}" /bin/bash -euxc "
+      export ZITI_BOOTSTRAP=true
+      export ZITI_BOOTSTRAP_ENROLLMENT=true
+      export ZITI_ENROLL_TOKEN='${_jwt_content}'
+      export ZITI_ROUTER_NAME=${_rtr_name}
+      export ZITI_ROUTER_ADVERTISED_ADDRESS=${_rtr_addr}
+      export ZITI_ROUTER_PORT=${_rtr_port}
+      DEBUG=1 /opt/openziti/etc/router/bootstrap.bash </dev/null
+    "
+
+    # Start router (bootstrap does NOT start it)
+    nspawn_exec "${_container}" systemctl start ziti-router.service
+
+    # Verify router online
+    retry 10 3 bash -c "[[ \$(${ZITI_BIN} edge list edge-routers -j 'name=\"${_rtr_name}\"' \
+      | jq -r '.data[0].isOnline') == 'true' ]]"
+    log_info "${_rtr_name} is online"
+  done
+
+  # Verify full cluster
+  log_section "Verifying 3-node cluster"
+  retry 5 3 bash -c "[[ \$(sudo -u ziti-controller ${ZITI_BIN} agent cluster list 2>/dev/null | grep -c 'tls:') -ge 3 ]]"
+  log_info "cluster has 3 members"
+
+  retry 5 3 bash -c "[[ \$(${ZITI_BIN} edge list edge-routers -j | jq '[.data[] | select(.isOnline)] | length') -eq 3 ]]"
+  log_info "all 3 routers online"
+}
+
+_expand_cluster
+
+# --- End cluster expansion ---
 
 export \
 ZITI_CTRL_EDGE_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS} \
