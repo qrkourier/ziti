@@ -46,7 +46,7 @@ elif [[ "${1}" =~ check ]]; then
     exit 1
   fi
   if [[ "${ZITI_BOOTSTRAP:-}" == true && "${ZITI_BOOTSTRAP_PKI:-}" == true ]]; then
-    loadEnvFiles /opt/openziti/etc/controller/bootstrap.env
+    loadEnvFiles /opt/openziti/etc/controller/service.env
     issueLeafCerts
     exit
   fi
