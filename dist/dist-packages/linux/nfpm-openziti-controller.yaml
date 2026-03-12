@@ -37,8 +37,9 @@ contents:
   - dst: /opt/openziti/etc/controller/
     src: ./dist/dist-packages/linux/openziti-controller/entrypoint.bash
 
-  - dst: /opt/openziti/etc/controller/
-    src: ./dist/dist-packages/linux/openziti-controller/override.conf.example
+  - dst: /etc/systemd/system/ziti-controller.service.d/override.conf
+    src: ./dist/dist-packages/linux/openziti-controller/override.conf
+    type: config|noreplace
 
   - dst: /usr/lib/tmpfiles.d/openziti-controller.conf
     src: ./dist/dist-packages/linux/openziti-controller/openziti-controller.tmpfiles.conf
