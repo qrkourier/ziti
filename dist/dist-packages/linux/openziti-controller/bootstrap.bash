@@ -736,7 +736,7 @@ exitHandler() {
     echo "WARN: see output in '${BOOTSTRAP_LOG_FILE}'" >&2
   fi
   if [[ -s "${ANSWERS_FILE:-}" ]]; then
-    echo "WARN: bootstrap answers preserved in '${ANSWERS_FILE}' for debugging" >&2
+    echo "WARN: bootstrap answers in '${ANSWERS_FILE}'" >&2
   fi
 }
 
@@ -745,7 +745,7 @@ exitHandler() {
 # discard debug unless this script is executed directly with DEBUG=1
 # initialize a file descriptor for debug output
 : "${DEBUG:=0}"
-: "${VERBOSE:=${DEBUG}}"
+: "${VERBOSE:=1}"
 if (( DEBUG )); then
   exec 3>&1
   set -o xtrace
@@ -824,8 +824,9 @@ else
   loadEnvFiles                  # load vars from SVC_ENV_FILE (lowest precedence)
   restoreZitiEnv
 
-  # Aggregate answers in a temp file — NOT in service.env or the shipped
-  # bootstrap.env template.  Deleted on success; left for debugging on failure.
+  # Aggregate answers in a temp file — deleted on success.
+  # The entrypoint does not need these; it parses config.yml for cert renewal.
+  # On failure the temp file survives for debugging.
   ANSWERS_FILE="$(mktemp)"
   loadEnvStdin                  # slurp ZITI_*=value lines from stdin if not a tty
   importZitiVars                # get ZITI_* vars from environment and set in ANSWERS_FILE
@@ -879,10 +880,11 @@ else
     if ! (( VERBOSE )); then
       exec 1>&4
     fi
+    # clean up temp answers file — config.yml is the source of truth now
+    rm -f "${ANSWERS_FILE:-}"
     echo -e "INFO: bootstrap completed successfully and will not run again."\
             "Adjust ${ZITI_HOME}/config.yml to suit." >&2
     trap - EXIT  # remove exit trap
-    rm -f "${ANSWERS_FILE:-}"  # clean up temp answers file
 
     # On Linux with systemd, enable and start the service if not already running
     if [[ -d /run/systemd/system ]]; then

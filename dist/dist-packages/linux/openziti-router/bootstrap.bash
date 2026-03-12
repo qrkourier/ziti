@@ -417,7 +417,7 @@ exitHandler() {
     echo "WARN: see output in '${_log_file}'" >&2
   fi
   if [[ -s "${ANSWERS_FILE:-}" ]]; then
-    echo "WARN: bootstrap answers preserved in '${ANSWERS_FILE}' for debugging" >&2
+    echo "WARN: bootstrap answers in '${ANSWERS_FILE}'" >&2
   fi
 }
 
@@ -426,7 +426,7 @@ exitHandler() {
 # discard debug unless this script is executed directly with DEBUG=1
 # initialize a file descriptor for debug output
 : "${DEBUG:=0}"
-: "${VERBOSE:=${DEBUG}}"
+: "${VERBOSE:=1}"
 if (( DEBUG )); then
   exec 3>&1
   set -o xtrace
@@ -498,8 +498,9 @@ else
   loadEnvFiles                  # load vars from SVC_ENV_FILE (lowest precedence)
   restoreZitiEnv
 
-  # Aggregate answers in a temp file — NOT in service.env or the shipped
-  # bootstrap.env template.  Deleted on success; left for debugging on failure.
+  # Aggregate answers in a temp file — deleted on success.
+  # The entrypoint does not need these; it parses config.yml at startup.
+  # On failure the temp file survives for debugging.
   ANSWERS_FILE="$(mktemp)"
   loadEnvStdin                  # slurp ZITI_*=value lines from stdin if not a tty
   importZitiVars                # get ZITI_* vars from environment and set in ANSWERS_FILE
@@ -520,11 +521,12 @@ else
     finalizeWorkingDir "${ZITI_HOME}"
     # successfully running this script directly means bootstrapping was enabled
     setAnswer "ZITI_BOOTSTRAP=true" "${SVC_ENV_FILE}"
-    rm -f "${ANSWERS_FILE:-}"
     # if VERBOSE, then stdin was already restore earlier, else do it now to announce completion
     if ! (( VERBOSE )); then
       exec 1>&4
     fi
+    # clean up temp answers file — config.yml is the source of truth now
+    rm -f "${ANSWERS_FILE:-}"
     echo -e "INFO: bootstrap completed successfully and will not run again."\
             "Adjust ${ZITI_HOME}/config.yml to suit." >&2
     trap - EXIT  # remove exit trap
