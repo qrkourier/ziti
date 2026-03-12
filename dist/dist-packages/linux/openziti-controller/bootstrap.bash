@@ -735,6 +735,9 @@ exitHandler() {
     cat "${INFO_LOG_FILE:-/dev/null}" "${DEBUG_LOG_FILE:-/dev/null}" >> "${BOOTSTRAP_LOG_FILE}"
     echo "WARN: see output in '${BOOTSTRAP_LOG_FILE}'" >&2
   fi
+  if [[ -f "${BOOT_ANSWERS_FILE:-}" ]]; then
+    echo "WARN: bootstrap answers preserved for debugging: ${BOOT_ANSWERS_FILE}" >&2
+  fi
 }
 
 # BEGIN
@@ -820,6 +823,14 @@ else
   prepareWorkingDir "${ZITI_HOME}"
   stashZitiEnv
   loadEnvFiles                  # load lowest precedence vars from SVC_ENV_FILE then BOOT_ENV_FILE
+
+  # Copy bootstrap answers to a temp file; write all answers there instead of
+  # the package-managed bootstrap.env.  Deleted on success, left for debugging
+  # on failure.
+  BOOT_ANSWERS_FILE="$(mktemp)"
+  cp "${BOOT_ENV_FILE}" "${BOOT_ANSWERS_FILE}"
+  BOOT_ENV_FILE="${BOOT_ANSWERS_FILE}"
+
   restoreZitiEnv
   importZitiVars                # get ZITI_* vars from environment and set in BOOT_ENV_FILE
   promptBootstrap               # prompt for ZITI_BOOTSTRAP if explicitly disabled (set and != true)
@@ -874,6 +885,7 @@ else
     if ! (( VERBOSE )); then
       exec 1>&4
     fi
+    rm -f "${BOOT_ANSWERS_FILE}"
     echo -e "INFO: bootstrap completed successfully and will not run again."\
             "Adjust ${ZITI_HOME}/config.yml to suit." >&2
     trap - EXIT  # remove exit trap

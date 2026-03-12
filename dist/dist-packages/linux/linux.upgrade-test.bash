@@ -221,9 +221,7 @@ build_packages
 # Record v1 conffile checksums before upgrade. These are config|noreplace
 # in nfpm, so dpkg must preserve the user's modified versions.
 _ctrl_svc_env_md5="$(md5sum /opt/openziti/etc/controller/service.env | awk '{print $1}')"
-_ctrl_boot_env_md5="$(md5sum /opt/openziti/etc/controller/bootstrap.env | awk '{print $1}')"
 _rtr_svc_env_md5="$(md5sum /opt/openziti/etc/router/service.env | awk '{print $1}')"
-_rtr_boot_env_md5="$(md5sum /opt/openziti/etc/router/bootstrap.env | awk '{print $1}')"
 
 # Upgrade without --force-confnew so dpkg preserves user-modified conffiles.
 # This is the realistic upgrade path — service.env retains ZITI_BOOTSTRAP=true
@@ -254,15 +252,11 @@ _verify_conffile() {
   fi
 }
 _verify_conffile /opt/openziti/etc/controller/service.env "${_ctrl_svc_env_md5}" "controller service.env"
-_verify_conffile /opt/openziti/etc/controller/bootstrap.env "${_ctrl_boot_env_md5}" "controller bootstrap.env"
 _verify_conffile /opt/openziti/etc/router/service.env "${_rtr_svc_env_md5}" "router service.env"
-_verify_conffile /opt/openziti/etc/router/bootstrap.env "${_rtr_boot_env_md5}" "router bootstrap.env"
 
 # Verify dpkg saved the new templates as .dpkg-new for admin review
 for _f in /opt/openziti/etc/controller/service.env \
-          /opt/openziti/etc/controller/bootstrap.env \
-          /opt/openziti/etc/router/service.env \
-          /opt/openziti/etc/router/bootstrap.env; do
+          /opt/openziti/etc/router/service.env; do
   if [[ -f "${_f}.dpkg-new" ]]; then
     log_pass "$(basename "${_f}").dpkg-new exists for admin review"
   else
