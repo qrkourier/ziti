@@ -278,7 +278,7 @@ loadEnvStdin() {
     while read -r line; do
       if [[ "${line:-}" =~ ^ZITI_.*= ]]; then
         eval "${line}"
-        setAnswer "${line}" "${SVC_ENV_FILE}" "${BOOT_ENV_FILE}"
+        setAnswer "${line}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
       # ignore lines beginning with # and lines containing only zero or more whitespace chars
       elif [[ "${line:-}" =~ ^(#|\\s*?$) ]]; then
         echo "DEBUG: ignoring '${line}'" >&3
@@ -296,7 +296,7 @@ loadEnvFiles() {
   then
     local -a _env_files=("${@}")
   else
-    local -a _env_files=("${BOOT_ENV_FILE}" "${SVC_ENV_FILE}")
+    local -a _env_files=("${SVC_ENV_FILE}")
   fi
   for _env_file in "${_env_files[@]}"
   do
@@ -321,10 +321,10 @@ promptCtrlAddress() {
       ZITI_CTRL_ADVERTISED_ADDRESS="$(prompt "Enter DNS name of the controller [required]: ")"
     fi
     if [[ -z "${ZITI_CTRL_ADVERTISED_ADDRESS:-}" ]]; then
-      echo "ERROR: missing required DNS name ZITI_CTRL_ADVERTISED_ADDRESS in ${BOOT_ENV_FILE}" >&2
+      echo "ERROR: missing required DNS name ZITI_CTRL_ADVERTISED_ADDRESS in ${SVC_ENV_FILE}" >&2
       return 1
     else
-      setAnswer "ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}" "${BOOT_ENV_FILE}"
+      setAnswer "ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     fi
   fi
 }
@@ -336,9 +336,9 @@ promptClusterNodePki(){
             "\n\t${ZITI_CA_FILE}/keys/${ZITI_CA_FILE}.key"\
             "\n"
     if ZITI_CLUSTER_NODE_PKI="$(prompt "Enter the path to the existing cluster's PKI directory: " )"; then
-      setAnswer "ZITI_CLUSTER_NODE_PKI=${ZITI_CLUSTER_NODE_PKI}" "${BOOT_ENV_FILE}"
+      setAnswer "ZITI_CLUSTER_NODE_PKI=${ZITI_CLUSTER_NODE_PKI}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     else
-      echo "ERROR: missing ZITI_CLUSTER_NODE_PKI in ${BOOT_ENV_FILE}; required for joining an existing cluster" >&2
+      echo "ERROR: missing ZITI_CLUSTER_NODE_PKI in ${SVC_ENV_FILE}; required for joining an existing cluster" >&2
       return 1
     fi
   fi
@@ -353,7 +353,7 @@ promptBootstrapCluster(){
     elif [[ "${ZITI_BOOTSTRAP_CLUSTER}" =~ ^([nN][oO]?|[fF]([aA][lL][sS][eE])?)$ ]]; then
       ZITI_BOOTSTRAP_CLUSTER=false
     fi
-    setAnswer "ZITI_BOOTSTRAP_CLUSTER=${ZITI_BOOTSTRAP_CLUSTER}" "${BOOT_ENV_FILE}"
+    setAnswer "ZITI_BOOTSTRAP_CLUSTER=${ZITI_BOOTSTRAP_CLUSTER}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
   fi
 }
 
@@ -368,14 +368,14 @@ promptClusterNodeName(){
       )"
     else
       if ! ZITI_CLUSTER_NODE_NAME="$(prompt "Enter the unique name for this node in the cluster [required]: ")"; then
-        echo "ERROR: missing required ZITI_CLUSTER_NODE_NAME in ${BOOT_ENV_FILE}" >&2
+        echo "ERROR: missing required ZITI_CLUSTER_NODE_NAME in ${SVC_ENV_FILE}" >&2
         return 1
       fi
     fi
     if [[ -n "${ZITI_CLUSTER_NODE_NAME:-}" ]]; then
-      setAnswer "ZITI_CLUSTER_NODE_NAME=${ZITI_CLUSTER_NODE_NAME}" "${BOOT_ENV_FILE}"
+      setAnswer "ZITI_CLUSTER_NODE_NAME=${ZITI_CLUSTER_NODE_NAME}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     else
-      echo "ERROR: missing required ZITI_CLUSTER_NODE_NAME in ${BOOT_ENV_FILE}" >&2
+      echo "ERROR: missing required ZITI_CLUSTER_NODE_NAME in ${SVC_ENV_FILE}" >&2
       return 1
     fi
   fi
@@ -395,10 +395,10 @@ promptClusterTrustDomain() {
       ZITI_CLUSTER_TRUST_DOMAIN="$(prompt "${_prompt} [required]: ")" || true
     fi
     if [[ -z "${ZITI_CLUSTER_TRUST_DOMAIN:-}" ]]; then
-      echo "ERROR: missing required ZITI_CLUSTER_TRUST_DOMAIN in ${BOOT_ENV_FILE}" >&2
+      echo "ERROR: missing required ZITI_CLUSTER_TRUST_DOMAIN in ${SVC_ENV_FILE}" >&2
       return 1
     else
-      setAnswer "ZITI_CLUSTER_TRUST_DOMAIN=${ZITI_CLUSTER_TRUST_DOMAIN}" "${BOOT_ENV_FILE}"
+      setAnswer "ZITI_CLUSTER_TRUST_DOMAIN=${ZITI_CLUSTER_TRUST_DOMAIN}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     fi
   fi
 }
@@ -415,7 +415,7 @@ promptBootstrap() {
                 ZITI_BOOTSTRAP=false
             fi
         fi
-        setAnswer "ZITI_BOOTSTRAP=${ZITI_BOOTSTRAP}" "${SVC_ENV_FILE}"
+        setAnswer "ZITI_BOOTSTRAP=${ZITI_BOOTSTRAP}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     fi
     if [[ -n "${ZITI_BOOTSTRAP:-}" && "${ZITI_BOOTSTRAP}" != true ]]; then
         return 1
@@ -453,7 +453,7 @@ promptCtrlPort() {
   # if undefined or default value in env file, prompt for router port, preserving default if no answer
   if [[ -z "${ZITI_CTRL_ADVERTISED_PORT:-}" ]]; then
     if ZITI_CTRL_ADVERTISED_PORT="$(prompt 'Enter the controller port [1280]: ' || echo '1280')"; then
-      setAnswer "ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}" "${BOOT_ENV_FILE}"
+      setAnswer "ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     fi
   fi
   if [[ "${ZITI_CTRL_ADVERTISED_PORT}" -lt 1024 ]]; then
@@ -465,7 +465,7 @@ promptUser() {
   # Prompt for admin username if database bootstrapping is enabled and not already set
   if [[ -z "${ZITI_USER:-}" && "${ZITI_BOOTSTRAP_DATABASE:-}" == true ]]; then
     if ZITI_USER="$(prompt 'Enter the name of the default user [admin]: ' || echo 'admin')"; then
-      setAnswer "ZITI_USER=${ZITI_USER}" "${BOOT_ENV_FILE}"
+      setAnswer "ZITI_USER=${ZITI_USER}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     fi
   fi
 }
@@ -482,7 +482,7 @@ promptPassword() {
     # don't set a generated password if not interactive because it will be unknown
     if isInteractive && ZITI_PWD="$(prompt "Set password for '${ZITI_USER:-admin}' [${GEN_PWD}]: " || echo "${GEN_PWD}")"; then
       # temporarily set password in env file, then scrub after db init
-      setAnswer "ZITI_PWD=${ZITI_PWD}" "${BOOT_ENV_FILE}"
+      setAnswer "ZITI_PWD=${ZITI_PWD}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     else
       echo "ERROR: ZITI_PWD is required" >&2
       return 1
@@ -503,7 +503,7 @@ importZitiVars() {
   # inherit Ziti vars and set answers
   for line in $(set | grep -e "^ZITI_" | sort); do
     # shellcheck disable=SC2013
-    setAnswer "${line}" "${SVC_ENV_FILE}" "${BOOT_ENV_FILE}"
+    setAnswer "${line}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
   done
 }
 
@@ -714,7 +714,7 @@ hintLinuxBootstrap() {
   local _work_dir="${1:-${PWD}}"
 
   echo -e "\nProvide a configuration in '${_work_dir}' or generate with:"\
-          "\n* Set vars in'/opt/openziti/etc/controller/bootstrap.env'"\
+          "\n* Set vars in '/opt/openziti/etc/controller/service.env'"\
           "\n* Run '/opt/openziti/etc/controller/bootstrap.bash'"\
           "\n* Run 'systemctl enable --now ziti-controller.service'"\
           "\n"
@@ -735,8 +735,8 @@ exitHandler() {
     cat "${INFO_LOG_FILE:-/dev/null}" "${DEBUG_LOG_FILE:-/dev/null}" >> "${BOOTSTRAP_LOG_FILE}"
     echo "WARN: see output in '${BOOTSTRAP_LOG_FILE}'" >&2
   fi
-  if [[ -f "${BOOT_ANSWERS_FILE:-}" ]]; then
-    echo "WARN: bootstrap answers preserved for debugging: ${BOOT_ANSWERS_FILE}" >&2
+  if [[ -s "${ANSWERS_FILE:-}" ]]; then
+    echo "WARN: bootstrap answers preserved in '${ANSWERS_FILE}' for debugging" >&2
   fi
 }
 
@@ -791,7 +791,6 @@ else
 
   export ZITI_HOME=/var/lib/ziti-controller
   SVC_ENV_FILE=/opt/openziti/etc/controller/service.env
-  BOOT_ENV_FILE=/opt/openziti/etc/controller/bootstrap.env
   SVC_FILE=/etc/systemd/system/ziti-controller.service.d/override.conf
   : "${ZITI_CONSOLE_LOCATION:=/opt/openziti/share/console}"
 
@@ -822,17 +821,14 @@ else
 
   prepareWorkingDir "${ZITI_HOME}"
   stashZitiEnv
-  loadEnvFiles                  # load lowest precedence vars from SVC_ENV_FILE then BOOT_ENV_FILE
-
-  # Copy bootstrap answers to a temp file; write all answers there instead of
-  # the package-managed bootstrap.env.  Deleted on success, left for debugging
-  # on failure.
-  BOOT_ANSWERS_FILE="$(mktemp)"
-  cp "${BOOT_ENV_FILE}" "${BOOT_ANSWERS_FILE}"
-  BOOT_ENV_FILE="${BOOT_ANSWERS_FILE}"
-
+  loadEnvFiles                  # load vars from SVC_ENV_FILE (lowest precedence)
   restoreZitiEnv
-  importZitiVars                # get ZITI_* vars from environment and set in BOOT_ENV_FILE
+
+  # Aggregate answers in a temp file — NOT in service.env or the shipped
+  # bootstrap.env template.  Deleted on success; left for debugging on failure.
+  ANSWERS_FILE="$(mktemp)"
+  loadEnvStdin                  # slurp ZITI_*=value lines from stdin if not a tty
+  importZitiVars                # get ZITI_* vars from environment and set in ANSWERS_FILE
   promptBootstrap               # prompt for ZITI_BOOTSTRAP if explicitly disabled (set and != true)
   promptBootstrapCluster        # prompt for new cluster or existing PKI
   promptClusterNodeName         # prompt for ZITI_CLUSTER_NODE_NAME if not already set
@@ -842,8 +838,6 @@ else
   promptCtrlPort                # prompt for ZITI_CTRL_ADVERTISED_PORT if not already set
   promptUser                    # prompt for ZITI_USER if not already set and database bootstrapping enabled
   promptPassword                # prompt for ZITI_PWD if not already set and database bootstrapping enabled
-  loadEnvStdin                  # slurp answers from stdin if it's not a tty
-  loadEnvFiles                  # reload env files to source new answers from prompts
 
   # suppress normal output during bootstrapping unless VERBOSE
   exec 4>&1; exec 1>>"${INFO_LOG_FILE:=$(mktemp)}"
@@ -885,10 +879,10 @@ else
     if ! (( VERBOSE )); then
       exec 1>&4
     fi
-    rm -f "${BOOT_ANSWERS_FILE}"
     echo -e "INFO: bootstrap completed successfully and will not run again."\
             "Adjust ${ZITI_HOME}/config.yml to suit." >&2
     trap - EXIT  # remove exit trap
+    rm -f "${ANSWERS_FILE:-}"  # clean up temp answers file
 
     # On Linux with systemd, enable and start the service if not already running
     if [[ -d /run/systemd/system ]]; then

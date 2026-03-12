@@ -176,7 +176,7 @@ loadEnvStdin() {
     while read -r line; do
       if [[ "${line:-}" =~ ^ZITI_.*= ]]; then
         eval "${line}"
-        setAnswer "${line}" "${SVC_ENV_FILE}" "${BOOT_ENV_FILE}"
+        setAnswer "${line}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
       # ignore lines beginning with # and lines containing only zero or more whitespace chars
       elif [[ "${line:-}" =~ ^(#|\\s*?$) ]]; then
         echo "DEBUG: ignoring '${line}'" >&3
@@ -194,7 +194,7 @@ loadEnvFiles() {
   then
     local -a _env_files=("${@}")
   else
-    local -a _env_files=("${BOOT_ENV_FILE}" "${SVC_ENV_FILE}")
+    local -a _env_files=("${SVC_ENV_FILE}")
   fi
   for _env_file in "${_env_files[@]}"
   do
@@ -211,9 +211,9 @@ loadEnvFiles() {
 promptRouterAddress() {
     if [[ -z "${ZITI_ROUTER_ADVERTISED_ADDRESS:-}" ]]; then
         if ZITI_ROUTER_ADVERTISED_ADDRESS="$(prompt "Enter the DNS name or IP address of this router [localhost]: " || echo "localhost")"; then
-            setAnswer "ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}" "${BOOT_ENV_FILE}"
+            setAnswer "ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
         else
-            echo "WARN: missing ZITI_ROUTER_ADVERTISED_ADDRESS in ${BOOT_ENV_FILE}" >&2
+            echo "WARN: missing ZITI_ROUTER_ADVERTISED_ADDRESS" >&2
             return 1
         fi
     fi
@@ -229,13 +229,13 @@ promptEnrollToken() {
             echo "WARN: ZITI_BOOTSTRAP_ENROLLMENT is not true in ${SVC_ENV_FILE}, not enrolling" >&2
         # do nothing if enrollment token is already defined in env file
         elif [[ -n "${ZITI_ENROLL_TOKEN:-}" ]]; then
-            echo "DEBUG: ZITI_ENROLL_TOKEN is defined in ${BOOT_ENV_FILE}" >&3
+            echo "DEBUG: ZITI_ENROLL_TOKEN is defined" >&3
         else
             if ZITI_ENROLL_TOKEN=$(prompt "Router enrollment token as string or path [required]: "); then
                 if [[ -n "${ZITI_ENROLL_TOKEN:-}" ]]; then
-                    setAnswer "ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}" "${BOOT_ENV_FILE}"
+                    setAnswer "ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
                 else
-                    echo "WARN: missing ZITI_ENROLL_TOKEN in ${BOOT_ENV_FILE}" >&2
+                    echo "WARN: missing ZITI_ENROLL_TOKEN" >&2
                 fi
             fi
         fi
@@ -255,7 +255,7 @@ promptRouterPort() {
     # if undefined or default value in env file, prompt for router port, preserving default if no answer
     if [[ -z "${ZITI_ROUTER_PORT:-}" ]]; then
         if ZITI_ROUTER_PORT="$(prompt 'Enter the router port [3022]: ' || echo '3022')"; then
-            setAnswer "ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}" "${BOOT_ENV_FILE}"
+            setAnswer "ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
         fi
     fi
     if [[ "${ZITI_ROUTER_PORT}" -lt 1024 ]]; then
@@ -267,7 +267,7 @@ promptCtrlAddress() {
   if [[ -z "${ZITI_CTRL_ADVERTISED_ADDRESS:-}" ]]; then
     if ZITI_CTRL_ADVERTISED_ADDRESS="$(prompt "Enter address of the controller [optional]: " || echo "")"; then
       if [[ -n "${ZITI_CTRL_ADVERTISED_ADDRESS}" ]]; then
-        setAnswer "ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}" "${BOOT_ENV_FILE}"
+        setAnswer "ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
       fi
     fi
   fi
@@ -285,7 +285,7 @@ promptBootstrap() {
                 ZITI_BOOTSTRAP=false
             fi
         fi
-        setAnswer "ZITI_BOOTSTRAP=${ZITI_BOOTSTRAP}" "${SVC_ENV_FILE}"
+        setAnswer "ZITI_BOOTSTRAP=${ZITI_BOOTSTRAP}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     fi
     if [[ -n "${ZITI_BOOTSTRAP:-}" && "${ZITI_BOOTSTRAP}" != true ]]; then
         return 1
@@ -327,7 +327,7 @@ promptCtrlPort() {
   # if undefined or default value in env file, prompt for controller port, preserving default if no answer
   if [[ -z "${ZITI_CTRL_ADVERTISED_PORT:-}" ]]; then
     if ZITI_CTRL_ADVERTISED_PORT="$(prompt 'Enter the controller port [1280]: ' || echo '1280')"; then
-      setAnswer "ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}" "${BOOT_ENV_FILE}"
+      setAnswer "ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
     fi
   fi
   if [[ "${ZITI_CTRL_ADVERTISED_PORT}" -lt 1024 ]]; then
@@ -348,7 +348,7 @@ importZitiVars() {
   # inherit Ziti vars and set answers
   for line in $(set | grep -e "^ZITI_" | sort); do
     # shellcheck disable=SC2013
-    setAnswer "${line}" "${SVC_ENV_FILE}" "${BOOT_ENV_FILE}"
+    setAnswer "${line}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
   done
 }
 
@@ -393,9 +393,9 @@ hintLinuxBootstrap() {
   local _work_dir="${1:-${PWD}}"
 
   echo -e "\nProvide a configuration in '${_work_dir}' or generate with:"\
-          "\n* Set vars in'/opt/openziti/etc/controller/bootstrap.env'"\
-          "\n* Run '/opt/openziti/etc/controller/bootstrap.bash'"\
-          "\n* Run 'systemctl enable --now ziti-controller.service'"\
+          "\n* Set vars in '/opt/openziti/etc/router/service.env'"\
+          "\n* Run '/opt/openziti/etc/router/bootstrap.bash'"\
+          "\n* Run 'systemctl enable --now ziti-router.service'"\
           "\n"
 }
 
@@ -416,8 +416,8 @@ exitHandler() {
     cat "${INFO_LOG_FILE:-/dev/null}" "${DEBUG_LOG_FILE:-/dev/null}" >| "${_log_file}"
     echo "WARN: see output in '${_log_file}'" >&2
   fi
-  if [[ -f "${BOOT_ANSWERS_FILE:-}" ]]; then
-    echo "WARN: bootstrap answers preserved for debugging: ${BOOT_ANSWERS_FILE}" >&2
+  if [[ -s "${ANSWERS_FILE:-}" ]]; then
+    echo "WARN: bootstrap answers preserved in '${ANSWERS_FILE}' for debugging" >&2
   fi
 }
 
@@ -465,7 +465,6 @@ else
   set -o pipefail
 
   export ZITI_HOME=/var/lib/ziti-router
-  BOOT_ENV_FILE=/opt/openziti/etc/router/bootstrap.env
   SVC_ENV_FILE=/opt/openziti/etc/router/service.env
   SVC_FILE=/etc/systemd/system/ziti-router.service.d/override.conf
 
@@ -496,23 +495,18 @@ else
 
   prepareWorkingDir "${ZITI_HOME}"
   stashZitiEnv
-  loadEnvFiles                  # load lowest precedence vars from SVC_ENV_FILE then BOOT_ENV_FILE
-
-  # Copy bootstrap answers to a temp file; write all answers there instead of
-  # the package-managed bootstrap.env.  Deleted on success, left for debugging
-  # on failure.
-  BOOT_ANSWERS_FILE="$(mktemp)"
-  cp "${BOOT_ENV_FILE}" "${BOOT_ANSWERS_FILE}"
-  BOOT_ENV_FILE="${BOOT_ANSWERS_FILE}"
-
+  loadEnvFiles                  # load vars from SVC_ENV_FILE (lowest precedence)
   restoreZitiEnv
-  importZitiVars                # get ZITI_* vars from environment and set in BOOT_ENV_FILE
+
+  # Aggregate answers in a temp file — NOT in service.env or the shipped
+  # bootstrap.env template.  Deleted on success; left for debugging on failure.
+  ANSWERS_FILE="$(mktemp)"
+  loadEnvStdin                  # slurp ZITI_*=value lines from stdin if not a tty
+  importZitiVars                # get ZITI_* vars from environment and set in ANSWERS_FILE
   promptBootstrap               # prompt for ZITI_BOOTSTRAP if explicitly disabled (set and != true)
   promptRouterAddress           # prompt for ZITI_ROUTER_ADVERTISED_ADDRESS if not already set
   promptRouterPort              # prompt for ZITI_ROUTER_PORT if not already set
   promptEnrollToken             # prompt for ZITI_ENROLL_TOKEN if not already set
-  loadEnvStdin                  # slurp answers from stdin if it's not a tty
-  loadEnvFiles                  # reload env files to source new answers from prompts
 
   # suppress normal output during bootstrapping unless VERBOSE
   exec 4>&1; exec 1>>"${INFO_LOG_FILE:=$(mktemp)}"
@@ -526,7 +520,7 @@ else
     finalizeWorkingDir "${ZITI_HOME}"
     # successfully running this script directly means bootstrapping was enabled
     setAnswer "ZITI_BOOTSTRAP=true" "${SVC_ENV_FILE}"
-    rm -f "${BOOT_ANSWERS_FILE}"
+    rm -f "${ANSWERS_FILE:-}"
     # if VERBOSE, then stdin was already restore earlier, else do it now to announce completion
     if ! (( VERBOSE )); then
       exec 1>&4
