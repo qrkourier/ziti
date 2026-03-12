@@ -309,11 +309,10 @@ jobs:
           set -o xtrace
           set +o errexit
 
-          eval "$(dist/docker-images/docker.test.bash --eval)"
-          docker compose ps --all
+          dist/docker-images/docker.test.bash ps --all
           for svc in ziti-controller1 ziti-controller2 ziti-controller3 ziti-router1 ziti-router2 ziti-router3; do
             echo "=== ${svc} ==="
-            docker compose logs "${svc}" 2>/dev/null | tail -80
+            dist/docker-images/docker.test.bash logs "${svc}" 2>/dev/null | tail -80
           done
           exit 0
 
