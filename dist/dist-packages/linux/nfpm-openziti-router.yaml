@@ -37,8 +37,9 @@ contents:
   - dst: /opt/openziti/etc/router/
     src: ./dist/dist-packages/linux/openziti-router/entrypoint.bash
 
-  - dst: /opt/openziti/etc/router/
-    src: ./dist/dist-packages/linux/openziti-router/override.conf.example
+  - dst: /etc/systemd/system/ziti-router.service.d/override.conf
+    src: ./dist/dist-packages/linux/openziti-router/override.conf
+    type: config|noreplace
 
   - dst: /usr/lib/tmpfiles.d/openziti-router.conf
     src: ./dist/dist-packages/linux/openziti-router/openziti-router.tmpfiles.conf
