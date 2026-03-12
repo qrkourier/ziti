@@ -40,6 +40,9 @@ contents:
   - dst: /opt/openziti/etc/router/
     src: ./dist/dist-packages/linux/openziti-router/override.conf.example
 
+  - dst: /usr/lib/tmpfiles.d/openziti-router.conf
+    src: ./dist/dist-packages/linux/openziti-router/openziti-router.tmpfiles.conf
+
 scripts:
   postinstall: ./dist/dist-packages/linux/openziti-router/postinstall.bash
 

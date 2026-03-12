@@ -8,9 +8,8 @@ set -o pipefail
 set -o xtrace
 
 cleanup(){
-    if ! (( I_AM_ROBOT ))
-    then
-        echo "WARNING: destroying minikube profile ${ZITI_NAMESPACE} in 30s; set I_AM_ROBOT=1 to suppress this message" >&2
+    if [[ -t 0 ]]; then
+        echo "Deleting minikube profile '${ZITI_NAMESPACE}' in 30s. Re-run with </dev/null to skip this delay." >&2
         sleep 30
     fi
 	if minikube --profile "${ZITI_NAMESPACE}" delete
@@ -51,9 +50,16 @@ for BIN in "${BINS[@]}"; do
 done
 
 
-: "${I_AM_ROBOT:=0}"
 : "${ZITI_GO_VERSION:=$(grep -E '^go \d+\.\d*' "./go.mod" | cut -d " " -f2)}"
 : "${ZITI_NAMESPACE:="zititest"}"
+
+# With a miniziti subcommand: pass through (e.g., ./k8s.test.bash kubectl get pods)
+# Without args or with flags: run the full test
+case "${1:-}" in
+    kubectl|minikube|shell|ziti|creds|console|status|login|delete)
+        exec ./quickstart/kubernetes/miniziti.bash --profile "${ZITI_NAMESPACE}" "$@"
+    ;;
+esac
 
 declare -a MINIKUBE_START_ARGS=()
 declare -a MINIZITI_START_ARGS=()

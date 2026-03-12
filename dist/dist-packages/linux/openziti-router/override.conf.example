@@ -20,7 +20,7 @@
 # ExecStartPre=
 # ExecStartPre=/opt/openziti/etc/router/entrypoint.bash check alt_config.yml
 # ExecStart=
-# ExecStart=/opt/openziti/bin/ziti router run alt_config.yml $ZITI_ARGS
+# ExecStart=/usr/bin/ziti router run alt_config.yml $ZITI_ARGS
 
 # Pass additional arguments to the router, e.g., --log-formatter text
 # This is set in service.env, but you can override it here.

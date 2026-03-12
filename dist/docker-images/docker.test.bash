@@ -5,12 +5,10 @@
 set -o errexit
 set -o nounset
 set -o pipefail
-set -o xtrace
 
 cleanup(){
-    if ! (( I_AM_ROBOT ))
-    then
-        echo "WARNING: destroying all controller and router state volumes in 30s; set I_AM_ROBOT=1 to suppress this message" >&2
+    if [[ -t 0 ]]; then
+        echo "Removing these containers and their volumes: ziti-controller1, ziti-controller2, ziti-controller3, ziti-router1, ziti-router2, ziti-router3, ziti-test in 30s. Re-run with </dev/null to skip this delay." >&2
         sleep 30
     fi
 	docker compose --profile test down --volumes --remove-orphans
@@ -36,36 +34,28 @@ checkCommand() {
     fi
 }
 
-eval_mode=0
-for arg in "$@"; do
-    if [[ "${arg}" == "--eval" ]]; then
-        eval_mode=1
-    fi
-done
-
-if (( ! eval_mode )); then
-    set -o xtrace
-fi
-
 BASEDIR="$(cd "$(dirname "${0}")" && pwd)"
 REPOROOT="$(cd "${BASEDIR}/../.." && pwd)"
 cd "${REPOROOT}"
 
-declare -a BINS=(grep docker go nc curl)
-for BIN in "${BINS[@]}"; do
-    checkCommand "$BIN"
-done
-
-: "${I_AM_ROBOT:=0}"
 : "${ZIGGY_UID:=$(id -u)}"
 : "${ZITI_GO_VERSION:=$(grep -E '^go \d+\.\d*' "./go.mod" | cut -d " " -f2)}"
 
 COMPOSE_FILE_VALUE="${REPOROOT}/dist/docker-images/ziti-controller/compose.yml:${REPOROOT}/dist/docker-images/ziti-controller/compose.test.yml:${REPOROOT}/dist/docker-images/ziti-router/compose.yml:${REPOROOT}/dist/docker-images/ziti-router/compose.test.yml"
 
-if (( eval_mode )); then
-    printf 'export COMPOSE_FILE=%q\n' "${COMPOSE_FILE_VALUE}"
-    exit 0
+# With args: pass through to docker compose (e.g., ./docker.test.bash ps, logs -f)
+# Without args: run the full test
+if (( $# )); then
+    export COMPOSE_FILE="${COMPOSE_FILE_VALUE}" ZIGGY_UID
+    exec docker compose "$@"
 fi
+
+set -o xtrace
+
+declare -a BINS=(grep docker go nc curl)
+for BIN in "${BINS[@]}"; do
+    checkCommand "$BIN"
+done
 
 ZITI_USER="admin"
 ZITI_PWD="ziggypw"
@@ -80,9 +70,13 @@ ZITI_CTRL3_ADVERTISED_ADDRESS="ziti-controller3.127.0.0.1.sslip.io"
 ZITI_CTRL3_ADVERTISED_PORT="1283"
 ZITI_CTRL3_NODE_NAME="ziti-controller3"
 ZITI_ROUTER_PORT="30222"
+ZITI_RTR2_PORT="30223"
+ZITI_RTR3_PORT="30224"
 ZITI_CONTROLLER_IMAGE="ziti-controller:local"
 ZITI_ROUTER_IMAGE="ziti-router:local"
 ZITI_ROUTER_NAME="router1"
+ZITI_RTR2_NAME="router2"
+ZITI_RTR3_NAME="router3"
 
 export COMPOSE_FILE="${COMPOSE_FILE_VALUE}" \
 ZIGGY_UID \
@@ -100,24 +94,30 @@ ZITI_CTRL3_ADVERTISED_ADDRESS \
 ZITI_CTRL3_ADVERTISED_PORT \
 ZITI_CTRL3_NODE_NAME \
 ZITI_ROUTER_PORT \
+ZITI_RTR2_PORT \
+ZITI_RTR3_PORT \
 ZITI_CONTROLLER_IMAGE \
 ZITI_ROUTER_IMAGE \
-ZITI_ROUTER_NAME
+ZITI_ROUTER_NAME \
+ZITI_RTR2_NAME \
+ZITI_RTR3_NAME
 
 export ZITI_ROUTER_ADVERTISED_ADDRESS="${ZITI_ROUTER_NAME}.127.0.0.1.sslip.io" \
 ZITI_ENROLL_TOKEN="/home/ziggy/.config/ziti/${ZITI_ROUTER_NAME}.jwt" \
-ZITI_ROUTER_LISTENER_BIND_PORT="${ZITI_ROUTER_PORT}"
+ZITI_ROUTER_LISTENER_BIND_PORT="${ZITI_ROUTER_PORT}" \
+ZITI_RTR2_ADVERTISED_ADDRESS="${ZITI_RTR2_NAME}.127.0.0.1.sslip.io" \
+ZITI_RTR3_ADVERTISED_ADDRESS="${ZITI_RTR3_NAME}.127.0.0.1.sslip.io"
 
 cleanup
 
-for PORT in "${ZITI_CTRL_ADVERTISED_PORT}" "${ZITI_CTRL2_ADVERTISED_PORT}" "${ZITI_CTRL3_ADVERTISED_PORT}" "${ZITI_ROUTER_PORT}"
+for PORT in "${ZITI_CTRL_ADVERTISED_PORT}" "${ZITI_CTRL2_ADVERTISED_PORT}" "${ZITI_CTRL3_ADVERTISED_PORT}" "${ZITI_ROUTER_PORT}" "${ZITI_RTR2_PORT}" "${ZITI_RTR3_PORT}"
 do
 	portcheck "${PORT}"
 done
 
 export GOOS="linux"
 os="$(go env GOOS)"
-arch="$(go env GOARCH)" 
+arch="$(go env GOARCH)"
 mkdir -p "./release/$arch/$os"
 go build -o "./release/$arch/$os" ./...
 
@@ -150,24 +150,106 @@ docker build \
 # ZITI_BOOTSTRAP_CLUSTER=true and ZITI_PWD is set
 docker compose up wait-for-controller
 
-# join controllers 2 and 3 to the cluster (retry for CI runners where raft may be slow to initialise)
-for svc in ziti-controller2 ziti-controller3; do
-    ATTEMPTS=20
-    DELAY=3
-    until docker compose exec -T "${svc}" ziti agent cluster add \
-            "tls:${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"; do
-        if (( ATTEMPTS-- == 0 )); then
-            echo "ERROR: ${svc} failed to join the cluster" >&2
-            exit 1
-        fi
-        echo "INFO: retrying cluster add for ${svc} (${ATTEMPTS} attempts left)"
-        sleep ${DELAY}
+# helper: log in to the controller from inside the container
+ctrl_login() {
+    docker compose exec -T ziti-controller1 /bin/bash -euxc "
+        ziti edge login \
+            \${ZITI_CTRL_ADVERTISED_ADDRESS}:\${ZITI_CTRL_ADVERTISED_PORT} \
+            --ca=/ziti-controller/pki/root/certs/root.cert \
+            --username=\${ZITI_USER} \
+            --password=\${ZITI_PWD} \
+            --timeout=1 \
+            --verbose
+    "
+}
+
+# helper: create an edge router and write its JWT to the shared volume
+create_router() {
+    local _name="$1" _jwt_path="$2"
+    docker compose exec -T ziti-controller1 /bin/bash -euxc "
+        ziti edge create edge-router '${_name}' -to '${_jwt_path}'
+    "
+}
+
+# helper: wait for a router to come online by name
+wait_router_online() {
+    local _name="$1"
+    local _attempts=10 _delay=3
+    until ! (( _attempts )) || [[ $(docker compose exec -T ziti-controller1 ziti edge list edge-routers -j "name=\"${_name}\"" | jq -r '.data[0].isOnline') == "true" ]]
+    do
+        (( _attempts-- ))
+        echo "INFO: waiting for ${_name} to be online"
+        sleep ${_delay}
     done
-    echo "INFO: ${svc} joined the cluster"
+    if [[ $(docker compose exec -T ziti-controller1 ziti edge list edge-routers -j "name=\"${_name}\"" | jq -r '.data[0].isOnline') == "true" ]]
+    then
+        echo "INFO: ${_name} is online"
+    else
+        echo "ERROR: ${_name} is offline" >&2
+        exit 1
+    fi
+}
+
+# log in and create the first router
+ATTEMPTS=10
+DELAY=2
+until ctrl_login; do
+    if (( ATTEMPTS-- == 0 )); then
+        echo "ERROR: failed to log in to controller" >&2
+        exit 1
+    fi
+    sleep ${DELAY}
 done
 
+create_router "${ZITI_ROUTER_NAME}" "/home/ziggy/.config/ziti/${ZITI_ROUTER_NAME}.jwt"
+
+# start router1 alongside controller1
+docker compose up ziti-router1 --detach
+wait_router_online "${ZITI_ROUTER_NAME}"
+
+# join controller2, then start router2
+ATTEMPTS=20
+DELAY=3
+until docker compose exec -T ziti-controller2 ziti agent cluster add \
+        "tls:${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"; do
+    if (( ATTEMPTS-- == 0 )); then
+        echo "ERROR: ziti-controller2 failed to join the cluster" >&2
+        exit 1
+    fi
+    echo "INFO: retrying cluster add for ziti-controller2 (${ATTEMPTS} attempts left)"
+    sleep ${DELAY}
+done
+echo "INFO: ziti-controller2 joined the cluster"
+
+create_router "${ZITI_RTR2_NAME}" "/home/ziggy/.config/ziti/${ZITI_RTR2_NAME}.jwt"
+# read the JWT from the shared volume and pass it to router2
+ZITI_RTR2_ENROLL_TOKEN="$(docker compose exec -T ziti-controller1 cat "/home/ziggy/.config/ziti/${ZITI_RTR2_NAME}.jwt")"
+export ZITI_RTR2_ENROLL_TOKEN
+docker compose up ziti-router2 --detach
+wait_router_online "${ZITI_RTR2_NAME}"
+
+# join controller3, then start router3
+ATTEMPTS=20
+DELAY=3
+until docker compose exec -T ziti-controller3 ziti agent cluster add \
+        "tls:${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT}"; do
+    if (( ATTEMPTS-- == 0 )); then
+        echo "ERROR: ziti-controller3 failed to join the cluster" >&2
+        exit 1
+    fi
+    echo "INFO: retrying cluster add for ziti-controller3 (${ATTEMPTS} attempts left)"
+    sleep ${DELAY}
+done
+echo "INFO: ziti-controller3 joined the cluster"
+
+create_router "${ZITI_RTR3_NAME}" "/home/ziggy/.config/ziti/${ZITI_RTR3_NAME}.jwt"
+ZITI_RTR3_ENROLL_TOKEN="$(docker compose exec -T ziti-controller1 cat "/home/ziggy/.config/ziti/${ZITI_RTR3_NAME}.jwt")"
+export ZITI_RTR3_ENROLL_TOKEN
+docker compose up ziti-router3 --detach
+wait_router_online "${ZITI_RTR3_NAME}"
+
 # verify the cluster has 3 members
-CLUSTER_OUTPUT="$(docker compose exec -T ziti-controller ziti agent cluster list 2>/dev/null)"
+CLUSTER_OUTPUT="$(docker compose exec -T ziti-controller1 ziti agent cluster list 2>/dev/null)"
 CLUSTER_SIZE="$(echo "${CLUSTER_OUTPUT}" | grep -c 'tls:')" || true
 if (( CLUSTER_SIZE < 3 )); then
     echo "ERROR: expected 3 cluster members, found ${CLUSTER_SIZE}" >&2
@@ -176,49 +258,19 @@ if (( CLUSTER_SIZE < 3 )); then
 fi
 echo "INFO: cluster has ${CLUSTER_SIZE} members"
 
-docker compose exec -T --env ZITI_ROUTER_NAME ziti-controller /bin/bash -euxc '
-
-ATTEMPTS=10
-DELAY=2
-until ziti edge login \
-${ZITI_CTRL_ADVERTISED_ADDRESS}:${ZITI_CTRL_ADVERTISED_PORT} \
---ca=/ziti-controller/pki/root/certs/root.cert \
---username=${ZITI_USER} \
---password=${ZITI_PWD} \
---timeout=1 \
---verbose
-do
-  if (( ATTEMPTS-- == 0 )); then
+# verify all 3 routers are online
+ROUTER_COUNT="$(docker compose exec -T ziti-controller1 ziti edge list edge-routers -j | jq '[.data[] | select(.isOnline == true)] | length')"
+if (( ROUTER_COUNT < 3 )); then
+    echo "ERROR: expected 3 online routers, found ${ROUTER_COUNT}" >&2
+    docker compose exec -T ziti-controller1 ziti edge list edge-routers
     exit 1
-  fi
-  sleep ${DELAY}
-done
-
-ziti edge create edge-router "${ZITI_ROUTER_NAME}" -to ~ziggy/.config/ziti/"${ZITI_ROUTER_NAME}.jwt";
-'
-
-docker compose up ziti-router --detach
+fi
+echo "INFO: all ${ROUTER_COUNT} routers are online"
 
 unset GOOS
 export \
 ZITI_CTRL_EDGE_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS} \
 ZITI_CTRL_EDGE_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
-
-ATTEMPTS=10
-DELAY=3
-until ! ((ATTEMPTS)) || [[ $(docker compose exec -T ziti-controller ziti edge list edge-routers -j | jq -r '.data[0].isOnline') == "true" ]]
-do
-    (( ATTEMPTS-- ))
-    echo "INFO: waiting for router to be online"
-    sleep ${DELAY}
-done
-if [[ $(docker compose exec -T ziti-controller ziti edge list edge-routers -j | jq -r '.data[0].isOnline') == "true" ]]
-then
-    echo "INFO: router is online"
-else
-    echo "INFO: router is offline"
-    exit 1
-fi
 
 _test_result=$(go test -v -count=1 -tags="quickstart manual" ./ziti/run/...)
 

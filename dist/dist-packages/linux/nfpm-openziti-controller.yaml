@@ -39,6 +39,9 @@ contents:
 
   - dst: /opt/openziti/etc/controller/
     src: ./dist/dist-packages/linux/openziti-controller/override.conf.example
+
+  - dst: /usr/lib/tmpfiles.d/openziti-controller.conf
+    src: ./dist/dist-packages/linux/openziti-controller/openziti-controller.tmpfiles.conf
 depends:
   - openziti  # ziti CLI
   - systemd (>= ${MINIMUM_SYSTEMD_VERSION})

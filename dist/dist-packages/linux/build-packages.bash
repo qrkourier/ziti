@@ -291,7 +291,7 @@ do
 		if [[ ${ARTIFACT} == openziti ]]
 		then
 			BUILDSUM=$(sha256sum $ARTIFACTS_DIR/$ARCH/linux/ziti | awk '{print $1}')
-			INSTALLSUM=$(sha256sum /opt/openziti/bin/ziti | awk '{print $1}')
+			INSTALLSUM=$(sha256sum /usr/bin/ziti | awk '{print $1}')
 			if [[ $BUILDSUM != "$INSTALLSUM" ]]
 			then
 				echo "Checksums do not match"

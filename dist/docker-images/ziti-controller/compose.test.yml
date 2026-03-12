@@ -4,7 +4,7 @@ volumes:
   ziti-controller3:
 
 services:
-  ziti-controller:
+  ziti-controller1:
     volumes:
       - ziti-test:/home/ziggy/.config/ziti
 
@@ -23,12 +23,12 @@ services:
     depends_on:
       chown-controller2:
         condition: service_completed_successfully
-      ziti-controller:
+      ziti-controller1:
         condition: service_healthy
     user: ${ZIGGY_UID:-2171}
     volumes:
       - ziti-controller2:/ziti-controller
-      - ziti-controller:/ctrl1-state:ro
+      - ziti-controller1:/ctrl1-state:ro
     networks:
       ziti:
         aliases:
@@ -71,12 +71,12 @@ services:
     depends_on:
       chown-controller3:
         condition: service_completed_successfully
-      ziti-controller:
+      ziti-controller1:
         condition: service_healthy
     user: ${ZIGGY_UID:-2171}
     volumes:
       - ziti-controller3:/ziti-controller
-      - ziti-controller:/ctrl1-state:ro
+      - ziti-controller1:/ctrl1-state:ro
     networks:
       ziti:
         aliases:
@@ -108,7 +108,7 @@ services:
     profiles:
       - test
     depends_on:
-      ziti-controller:
+      ziti-controller1:
         condition: service_healthy
       ziti-controller2:
         condition: service_healthy
