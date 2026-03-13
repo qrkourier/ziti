@@ -793,6 +793,7 @@ else
   export ZITI_HOME=/var/lib/ziti-controller
   SVC_ENV_FILE=/opt/openziti/etc/controller/service.env
   STATE_ENV_FILE=/var/lib/ziti-controller/state.env
+  touch "${STATE_ENV_FILE}"  # ensure file exists for setAnswer() grep
   SVC_FILE=/etc/systemd/system/ziti-controller.service.d/override.conf
   : "${ZITI_CONSOLE_LOCATION:=/opt/openziti/share/console}"
 

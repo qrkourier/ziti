@@ -468,6 +468,7 @@ else
   export ZITI_HOME=/var/lib/ziti-router
   SVC_ENV_FILE=/opt/openziti/etc/router/service.env
   STATE_ENV_FILE=/var/lib/ziti-router/state.env
+  touch "${STATE_ENV_FILE}"  # ensure file exists for setAnswer() grep
   SVC_FILE=/etc/systemd/system/ziti-router.service.d/override.conf
 
   if [[ "${1:-}" =~ ^[-] ]]
