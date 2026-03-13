@@ -45,7 +45,6 @@ contents:
     src: ./dist/dist-packages/linux/openziti-controller/openziti-controller.tmpfiles.conf
 depends:
   - openziti  # ziti CLI
-  - openssl   # entrypoint.bash uses openssl x509 for cert inspection
   - systemd (>= ${MINIMUM_SYSTEMD_VERSION})
 
 scripts:

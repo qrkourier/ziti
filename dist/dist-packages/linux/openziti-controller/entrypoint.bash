@@ -8,9 +8,10 @@
 #   run config.yml    — start the controller; in Docker with ZITI_BOOTSTRAP=true,
 #                        run bootstrap() first to generate PKI/config/database
 #
-# Both paths source bootstrap.bash for function definitions (issueLeafCerts, etc.)
-# but the 'check' path populates variables from config.yml — the authoritative
-# source of truth after bootstrap — rather than from env files or saved answers.
+# Both paths source bootstrap.bash for function definitions (issueLeafCerts, etc.).
+# The 'check' path loads service.env (feature flags) and state.env (deployment-specific
+# answers: PKI paths, node name, advertised address, etc.) so cert renewal uses the
+# actual deployment values rather than relying on defaults.
 #
 # usage:
 #   entrypoint.bash run config.yml
@@ -44,67 +45,6 @@ source "${ZITI_CTRL_BOOTSTRAP_BASH:-/opt/openziti/etc/controller/bootstrap.bash}
 trap - EXIT SIGINT SIGTERM
 
 ##############################################################################
-# loadConfigVars: populate ZITI_* variables from config.yml so that
-# issueLeafCerts() can be called without env files or saved answers.
-#
-# Parses:
-#   identity.{cert,server_cert,key,ca} → derive PKI_ROOT, INTERMEDIATE, SERVER, CLIENT, CA file names
-#   ctrl.options.advertiseAddress      → ZITI_CTRL_ADVERTISED_ADDRESS
-#   existing server cert SPIFFE SAN    → ZITI_CLUSTER_NODE_NAME
-##############################################################################
-loadConfigVars() {
-  local _config_file="$1"
-
-  # Parse identity paths
-  local _server_cert_path _client_cert_path _key_path _ca_cert_path
-  _server_cert_path="$(awk '/^identity:/{f=1} f && /^[[:space:]]+server_cert:/{gsub(/^[[:space:]]+server_cert:[[:space:]]*"?|"?[[:space:]]*$/,""); print; exit}' "${_config_file}")"
-  _client_cert_path="$(awk '/^identity:/{f=1} f && /^[[:space:]]+cert:/{gsub(/^[[:space:]]+cert:[[:space:]]*"?|"?[[:space:]]*$/,""); print; exit}' "${_config_file}")"
-  _ca_cert_path="$(awk '/^identity:/{f=1} f && /^[[:space:]]+ca:/{gsub(/^[[:space:]]+ca:[[:space:]]*"?|"?[[:space:]]*$/,""); print; exit}' "${_config_file}")"
-
-  if [[ -z "${_server_cert_path}" || -z "${_client_cert_path}" || -z "${_ca_cert_path}" ]]; then
-    echo "ERROR: cannot parse identity paths from ${_config_file}" >&2
-    return 1
-  fi
-
-  # Derive PKI structure from identity paths:
-  #   server_cert: pki/<intermediate>/certs/<server>.chain.pem
-  #   cert:        pki/<intermediate>/certs/<client>.chain.pem
-  #   ca:          pki/<ca>/certs/<ca>.cert
-  local _certs_dir _intermediate_dir
-  _certs_dir="$(dirname "${_server_cert_path}")"
-  _intermediate_dir="$(dirname "${_certs_dir}")"
-
-  ZITI_PKI_ROOT="$(dirname "${_intermediate_dir}")"
-  ZITI_INTERMEDIATE_FILE="$(basename "${_intermediate_dir}")"
-  ZITI_SERVER_FILE="$(basename "${_server_cert_path}" .chain.pem)"
-  ZITI_CLIENT_FILE="$(basename "${_client_cert_path}" .chain.pem)"
-  # shellcheck disable=SC2034  # used by issueLeafCerts() from bootstrap.bash
-  ZITI_CA_FILE="$(basename "$(basename "${_ca_cert_path}" .cert)")"
-
-  # Parse advertised address: "tls:<host>:<port>" → host
-  local _adv_raw
-  _adv_raw="$(awk '/^ctrl:/{c=1} c && /advertiseAddress:/{gsub(/^.*advertiseAddress:[[:space:]]*"?|"?[[:space:]]*$/,""); print; exit}' "${_config_file}")"
-  if [[ -n "${_adv_raw}" ]]; then
-    local _stripped="${_adv_raw#tls:}"
-    ZITI_CTRL_ADVERTISED_ADDRESS="${_stripped%:*}"
-  fi
-
-  # Extract cluster node name from existing server cert's SPIFFE URI SAN.
-  # The SPIFFE path is "controller/<node_name>".
-  if [[ -s "${_server_cert_path}" ]]; then
-    local _spiffe_path
-    _spiffe_path="$(openssl x509 -in "${_server_cert_path}" -noout -ext subjectAltName 2>/dev/null \
-      | grep -oP 'URI:spiffe://[^/]+/\Kcontroller/[^\s,]+' || true)"
-    if [[ "${_spiffe_path}" == controller/* ]]; then
-      ZITI_CLUSTER_NODE_NAME="${_spiffe_path#controller/}"
-      echo "DEBUG: parsed cluster node name from cert SPIFFE SAN: ${ZITI_CLUSTER_NODE_NAME}" >&3
-    fi
-  fi
-
-  echo "DEBUG: loadConfigVars: PKI_ROOT=${ZITI_PKI_ROOT} INTERMEDIATE=${ZITI_INTERMEDIATE_FILE} SERVER=${ZITI_SERVER_FILE} CLIENT=${ZITI_CLIENT_FILE} ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS:-}" >&3
-}
-
-##############################################################################
 # Main dispatch
 ##############################################################################
 
@@ -124,12 +64,15 @@ if [[ "${1}" =~ check ]]; then
     exit 1
   fi
 
-  # renew leaf certs if enabled — parse config.yml for all needed values
+  # Renew leaf certs if enabled.
+  # service.env has feature flags (ZITI_BOOTSTRAP, ZITI_AUTO_RENEW_CERTS, etc.).
+  # state.env has deployment-specific answers from bootstrap (ZITI_CLUSTER_NODE_NAME,
+  # ZITI_CTRL_ADVERTISED_ADDRESS, ZITI_PKI_ROOT, ZITI_INTERMEDIATE_FILE, etc.).
+  # state.env is loaded second so deployment values override any defaults.
   if [[ "${ZITI_BOOTSTRAP:-}" == true && "${ZITI_BOOTSTRAP_PKI:-}" == true ]]; then
-    # load service.env for ZITI_AUTO_RENEW_CERTS (and ZITI_BOOTSTRAP_* flags)
-    loadEnvFiles /opt/openziti/etc/controller/service.env
+    loadEnvFiles /opt/openziti/etc/controller/service.env /var/lib/ziti-controller/state.env
     if [[ "${ZITI_AUTO_RENEW_CERTS:-true}" == true ]]; then
-      loadConfigVars "${2}"
+      echo "DEBUG: issueLeafCerts: NODE_NAME=${ZITI_CLUSTER_NODE_NAME:-} ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS:-} PKI_ROOT=${ZITI_PKI_ROOT:-} INTERMEDIATE=${ZITI_INTERMEDIATE_FILE:-}" >&3
       issueLeafCerts
     fi
   fi

@@ -176,7 +176,7 @@ loadEnvStdin() {
     while read -r line; do
       if [[ "${line:-}" =~ ^ZITI_.*= ]]; then
         eval "${line}"
-        setAnswer "${line}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
+        setAnswer "${line}" "${SVC_ENV_FILE}" "${STATE_ENV_FILE}" "${ANSWERS_FILE}"
       # ignore lines beginning with # and lines containing only zero or more whitespace chars
       elif [[ "${line:-}" =~ ^(#|\\s*?$) ]]; then
         echo "DEBUG: ignoring '${line}'" >&3
@@ -203,15 +203,15 @@ loadEnvFiles() {
       # shellcheck disable=SC1090
       source "${_env_file}"
     else
-      echo "WARN: missing env file '${_env_file}'" >&2
-    fi 
+      echo "DEBUG: env file not found or empty: '${_env_file}'" >&3
+    fi
   done
 }
 
 promptRouterAddress() {
     if [[ -z "${ZITI_ROUTER_ADVERTISED_ADDRESS:-}" ]]; then
         if ZITI_ROUTER_ADVERTISED_ADDRESS="$(prompt "Enter the DNS name or IP address of this router [localhost]: " || echo "localhost")"; then
-            setAnswer "ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
+            setAnswer "ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}" "${STATE_ENV_FILE}" "${ANSWERS_FILE}"
         else
             echo "WARN: missing ZITI_ROUTER_ADVERTISED_ADDRESS" >&2
             return 1
@@ -233,7 +233,7 @@ promptEnrollToken() {
         else
             if ZITI_ENROLL_TOKEN=$(prompt "Router enrollment token as string or path [required]: "); then
                 if [[ -n "${ZITI_ENROLL_TOKEN:-}" ]]; then
-                    setAnswer "ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
+                    setAnswer "ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}" "${STATE_ENV_FILE}" "${ANSWERS_FILE}"
                 else
                     echo "WARN: missing ZITI_ENROLL_TOKEN" >&2
                 fi
@@ -255,7 +255,7 @@ promptRouterPort() {
     # if undefined or default value in env file, prompt for router port, preserving default if no answer
     if [[ -z "${ZITI_ROUTER_PORT:-}" ]]; then
         if ZITI_ROUTER_PORT="$(prompt 'Enter the router port [3022]: ' || echo '3022')"; then
-            setAnswer "ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
+            setAnswer "ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}" "${STATE_ENV_FILE}" "${ANSWERS_FILE}"
         fi
     fi
     if [[ "${ZITI_ROUTER_PORT}" -lt 1024 ]]; then
@@ -267,7 +267,7 @@ promptCtrlAddress() {
   if [[ -z "${ZITI_CTRL_ADVERTISED_ADDRESS:-}" ]]; then
     if ZITI_CTRL_ADVERTISED_ADDRESS="$(prompt "Enter address of the controller [optional]: " || echo "")"; then
       if [[ -n "${ZITI_CTRL_ADVERTISED_ADDRESS}" ]]; then
-        setAnswer "ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
+        setAnswer "ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}" "${STATE_ENV_FILE}" "${ANSWERS_FILE}"
       fi
     fi
   fi
@@ -327,7 +327,7 @@ promptCtrlPort() {
   # if undefined or default value in env file, prompt for controller port, preserving default if no answer
   if [[ -z "${ZITI_CTRL_ADVERTISED_PORT:-}" ]]; then
     if ZITI_CTRL_ADVERTISED_PORT="$(prompt 'Enter the controller port [1280]: ' || echo '1280')"; then
-      setAnswer "ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
+      setAnswer "ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}" "${STATE_ENV_FILE}" "${ANSWERS_FILE}"
     fi
   fi
   if [[ "${ZITI_CTRL_ADVERTISED_PORT}" -lt 1024 ]]; then
@@ -345,10 +345,11 @@ grantNetBindService() {
 }
 
 importZitiVars() {
-  # inherit Ziti vars and set answers
+  # Inherit ZITI_* vars from the environment. Feature flags (keys already in
+  # service.env) update there; all others land in state.env (deployment state).
   for line in $(set | grep -e "^ZITI_" | sort); do
     # shellcheck disable=SC2013
-    setAnswer "${line}" "${SVC_ENV_FILE}" "${ANSWERS_FILE}"
+    setAnswer "${line}" "${SVC_ENV_FILE}" "${STATE_ENV_FILE}" "${ANSWERS_FILE}"
   done
 }
 
@@ -466,6 +467,7 @@ else
 
   export ZITI_HOME=/var/lib/ziti-router
   SVC_ENV_FILE=/opt/openziti/etc/router/service.env
+  STATE_ENV_FILE=/var/lib/ziti-router/state.env
   SVC_FILE=/etc/systemd/system/ziti-router.service.d/override.conf
 
   if [[ "${1:-}" =~ ^[-] ]]
@@ -495,11 +497,11 @@ else
 
   prepareWorkingDir "${ZITI_HOME}"
   stashZitiEnv
-  loadEnvFiles                  # load vars from SVC_ENV_FILE (lowest precedence)
+  loadEnvFiles "${SVC_ENV_FILE}" "${STATE_ENV_FILE}"  # feature flags, then deployment state (lowest precedence)
   restoreZitiEnv
 
   # Aggregate answers in a temp file — deleted on success.
-  # The entrypoint does not need these; it parses config.yml at startup.
+  # Deployment-specific vars are persisted to state.env (in the state directory).
   # On failure the temp file survives for debugging.
   ANSWERS_FILE="$(mktemp)"
   loadEnvStdin                  # slurp ZITI_*=value lines from stdin if not a tty

@@ -405,7 +405,7 @@ nspawn_create_base() {
     sudo tar xf "${_cache_tar}" -C "${_base_dir}"
   else
     log_info "creating base rootfs (${_codename}) in ${_base_dir}"
-    sudo mmdebstrap --variant=minbase --include=systemd,dbus,openssl \
+    sudo mmdebstrap --variant=minbase --include=systemd,dbus \
       "${_codename}" "${_base_dir}"
 
     # Save the OS layer for future runs
