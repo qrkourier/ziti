@@ -5,9 +5,34 @@
 set -o errexit
 set -o nounset
 set -o pipefail
+set -o errtrace
 set -o xtrace
 
+_exit_code=0
+_in_err_handler=0
+_err_handler() {
+    _exit_code=$?
+    if (( _in_err_handler )); then return; fi
+    _in_err_handler=1
+    echo "ERROR: FAILED at line ${LINENO}: ${BASH_COMMAND} (exit ${_exit_code})" >&2
+    # Dump pod status and logs for diagnostics
+    (
+        set +e
+        minikube kubectl --profile "${ZITI_NAMESPACE:-zititest}" -- \
+            --context "${ZITI_NAMESPACE:-zititest}" \
+            get pods -A 2>&1 || true
+        for _ns in "${ZITI_NAMESPACE:-zititest}" traefik; do
+            minikube kubectl --profile "${ZITI_NAMESPACE:-zititest}" -- \
+                --context "${ZITI_NAMESPACE:-zititest}" \
+                logs -n "${_ns}" --all-containers --tail=100 2>&1 || true
+        done
+    ) >&2
+}
+trap '_err_handler' ERR
+
 cleanup(){
+    # Disable errexit in cleanup — every command is best-effort
+    set +o errexit
     if [[ -t 0 ]]; then
         echo "Deleting minikube profile '${ZITI_NAMESPACE}' in 30s. Re-run with </dev/null to skip this delay." >&2
         sleep 30
@@ -20,6 +45,7 @@ cleanup(){
     fi
     return 0
 }
+trap 'cleanup; exit $_exit_code' EXIT
 
 portcheck(){
     PORT="${1}"
@@ -216,4 +242,4 @@ then
     exit 1
 fi
 
-cleanup
+# cleanup runs via EXIT trap

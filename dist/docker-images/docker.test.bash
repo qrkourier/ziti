@@ -5,8 +5,23 @@
 set -o errexit
 set -o nounset
 set -o pipefail
+set -o errtrace
+
+_exit_code=0
+_in_err_handler=0
+_err_handler() {
+    _exit_code=$?
+    if (( _in_err_handler )); then return; fi
+    _in_err_handler=1
+    echo "ERROR: FAILED at line ${LINENO}: ${BASH_COMMAND} (exit ${_exit_code})" >&2
+    # Dump container logs for diagnostics
+    docker compose logs --tail=200 >&2 2>/dev/null || true
+}
+trap '_err_handler' ERR
 
 cleanup(){
+    # Disable errexit in cleanup — every command is best-effort
+    set +o errexit
     if [[ -t 0 ]]; then
         echo "Removing these containers and their volumes: ziti-controller1, ziti-controller2, ziti-controller3, ziti-router1, ziti-router2, ziti-router3, ziti-test in 30s. Re-run with </dev/null to skip this delay." >&2
         sleep 30
@@ -14,6 +29,7 @@ cleanup(){
 	docker compose --profile test down --volumes --remove-orphans
     echo "DEBUG: cleanup complete"
 }
+trap 'cleanup; exit $_exit_code' EXIT
 
 portcheck(){
     PORT="${1}"
@@ -293,4 +309,4 @@ do
 done
 eval "${curl_cmd}"
 
-cleanup
+# cleanup runs via EXIT trap

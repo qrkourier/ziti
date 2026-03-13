@@ -9,9 +9,9 @@
 #                        run bootstrap() first to generate PKI/config/database
 #
 # Both paths source bootstrap.bash for function definitions (issueLeafCerts, etc.).
-# The 'check' path loads service.env (feature flags) and state.env (deployment-specific
-# answers: PKI paths, node name, advertised address, etc.) so cert renewal uses the
-# actual deployment values rather than relying on defaults.
+# The 'check' path loads service.env (feature flags), bootstrap.env (v1 deployment
+# answers), and state.env (v2 deployment answers) so cert renewal uses the actual
+# deployment values rather than relying on defaults.
 #
 # usage:
 #   entrypoint.bash run config.yml
@@ -66,11 +66,13 @@ if [[ "${1}" =~ check ]]; then
 
   # Renew leaf certs if enabled.
   # service.env has feature flags (ZITI_BOOTSTRAP, ZITI_AUTO_RENEW_CERTS, etc.).
-  # state.env has deployment-specific answers from bootstrap (ZITI_CLUSTER_NODE_NAME,
-  # ZITI_CTRL_ADVERTISED_ADDRESS, ZITI_PKI_ROOT, ZITI_INTERMEDIATE_FILE, etc.).
-  # state.env is loaded second so deployment values override any defaults.
+  # bootstrap.env has v1 deployment answers (ZITI_CTRL_ADVERTISED_ADDRESS, etc.).
+  # state.env has v2 deployment answers (PKI paths, node name, etc.).
+  # Later files override earlier ones; state.env wins over bootstrap.env.
   if [[ "${ZITI_BOOTSTRAP:-}" == true && "${ZITI_BOOTSTRAP_PKI:-}" == true ]]; then
-    loadEnvFiles /opt/openziti/etc/controller/service.env /var/lib/ziti-controller/state.env
+    loadEnvFiles /opt/openziti/etc/controller/service.env \
+                 /opt/openziti/etc/controller/bootstrap.env \
+                 /var/lib/ziti-controller/state.env
     if [[ "${ZITI_AUTO_RENEW_CERTS:-true}" == true ]]; then
       echo "DEBUG: issueLeafCerts: NODE_NAME=${ZITI_CLUSTER_NODE_NAME:-} ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS:-} PKI_ROOT=${ZITI_PKI_ROOT:-} INTERMEDIATE=${ZITI_INTERMEDIATE_FILE:-}" >&3
       issueLeafCerts
