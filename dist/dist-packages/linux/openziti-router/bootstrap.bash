@@ -413,12 +413,15 @@ exitHandler() {
 
 # BEGIN
 
-# set defaults — record whether values were explicitly provided before applying defaults
-[[ -n "${ZITI_CTRL_ADVERTISED_PORT:-}" ]] && _ZITI_CTRL_PORT_PROVIDED=true || _ZITI_CTRL_PORT_PROVIDED=false
+# Record whether port values were inherited from the parent environment
+# (before defaults are applied). Answer file is checked separately later.
+_ZITI_ROUTER_PORT_PROVIDED="${ZITI_ROUTER_PORT:+true}"
+_ZITI_CTRL_PORT_PROVIDED="${ZITI_CTRL_ADVERTISED_PORT:+true}"
+
+# set defaults
 : "${ZITI_CTRL_ADVERTISED_PORT:=1280}"
 # ZITI_ROUTER_ADVERTISED_ADDRESS has no default — Docker sets it via compose
 # env; Linux prompts for it if unset (see promptRouterAddress).
-[[ -n "${ZITI_ROUTER_PORT:-}" ]] && _ZITI_ROUTER_PORT_PROVIDED=true || _ZITI_ROUTER_PORT_PROVIDED=false
 : "${ZITI_ROUTER_PORT:=3022}"
 : "${ZITI_ROUTER_BIND_ADDRESS:=0.0.0.0}"  # the interface address on which to listen
 : "${ZITI_ROUTER_NAME:=router}"  # basename of identity files
@@ -500,6 +503,12 @@ else
     loadEnvFiles "${ANSWER_FILE}"
   fi
   importZitiVars                # get ZITI_* vars from environment and set in BOOT_ENV_FILE
+
+  # Also mark as provided if the answer file contains the value
+  if [[ -n "${ANSWER_FILE}" && -f "${ANSWER_FILE}" ]]; then
+    grep -q '^ZITI_ROUTER_PORT=' "${ANSWER_FILE}" 2>/dev/null && _ZITI_ROUTER_PORT_PROVIDED=true
+    grep -q '^ZITI_CTRL_ADVERTISED_PORT=' "${ANSWER_FILE}" 2>/dev/null && _ZITI_CTRL_PORT_PROVIDED=true
+  fi
 
   promptBootstrap               # prompt for ZITI_BOOTSTRAP if explicitly disabled (set and != true)
   promptRouterAddress           # prompt for ZITI_ROUTER_ADVERTISED_ADDRESS if not already set
