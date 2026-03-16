@@ -116,13 +116,28 @@ sudo mkdir -p "${ZITI_CONSOLE_LOCATION}"
 sudo tee "${ZITI_CONSOLE_LOCATION}/index.html" <<< "I am ZAC"
 sudo chmod -R +rX "${ZITI_CONSOLE_LOCATION}"
 
+# Write controller answer file for non-interactive bootstrap
+CTRL_ANSWER_FILE="${TMPDIR}/controller-answers.env"
+cat > "${CTRL_ANSWER_FILE}" <<EOF
+ZITI_BOOTSTRAP=${ZITI_BOOTSTRAP}
+ZITI_BOOTSTRAP_CLUSTER=${ZITI_BOOTSTRAP_CLUSTER}
+ZITI_BOOTSTRAP_CONSOLE=${ZITI_BOOTSTRAP_CONSOLE}
+ZITI_CLUSTER_NODE_NAME=${ZITI_CLUSTER_NODE_NAME}
+ZITI_CLUSTER_TRUST_DOMAIN=${ZITI_CLUSTER_TRUST_DOMAIN}
+ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
+ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
+ZITI_PWD=${ZITI_PWD}
+ZITI_USER=${ZITI_USER}
+ZITI_CONSOLE_LOCATION=${ZITI_CONSOLE_LOCATION}
+EOF
+
 # bootstrap.bash now handles:
 # 1. PKI generation
 # 2. Config file creation
 # 3. Starting the controller service
 # 4. Cluster initialization (creating default admin)
 log_section "Bootstrapping controller"
-DEBUG=1 sudo -E /opt/openziti/etc/controller/bootstrap.bash </dev/null  # closing stdin suppresses prompts
+DEBUG=1 sudo -E /opt/openziti/etc/controller/bootstrap.bash "${CTRL_ANSWER_FILE}" </dev/null
 
 # Verify controller service is running (bootstrap.bash should have started it)
 wait_for_service ziti-controller.service 30
@@ -158,9 +173,20 @@ if [[ -z "${ZITI_ENROLL_TOKEN_CONTENT}" ]]; then
 fi
 export ZITI_ENROLL_TOKEN="${ZITI_ENROLL_TOKEN_CONTENT}"
 
+# Write router answer file for non-interactive bootstrap
+RTR_ANSWER_FILE="${TMPDIR}/router-answers.env"
+cat > "${RTR_ANSWER_FILE}" <<EOF
+ZITI_BOOTSTRAP=true
+ZITI_BOOTSTRAP_ENROLLMENT=true
+ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}
+ZITI_ROUTER_NAME=${ZITI_ROUTER_NAME}
+ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
+ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}
+EOF
+
 log_section "Bootstrapping router"
 ZITI_BOOTSTRAP=true ZITI_BOOTSTRAP_ENROLLMENT=true DEBUG=1 \
-    sudo -E /opt/openziti/etc/router/bootstrap.bash </dev/null  # closing stdin suppresses prompts
+    sudo -E /opt/openziti/etc/router/bootstrap.bash "${RTR_ANSWER_FILE}" </dev/null
 start_service ziti-router.service
 wait_for_service ziti-router.service 20
 
@@ -221,18 +247,23 @@ _expand_cluster() {
 
     nspawn_boot "${_container}"
 
+    # Write answer file for joiner controller
+    local _nspawn_ctrl_answers="${NSPAWN_DIR}/${_container}/ctrl-answers.env"
+    sudo tee "${_nspawn_ctrl_answers}" >/dev/null <<NSPAWN_EOF
+ZITI_BOOTSTRAP=true
+ZITI_BOOTSTRAP_PKI=true
+ZITI_BOOTSTRAP_CONFIG=true
+ZITI_BOOTSTRAP_DATABASE=true
+ZITI_BOOTSTRAP_CLUSTER=false
+ZITI_CLUSTER_NODE_PKI=/ctrl1-pki
+ZITI_CLUSTER_NODE_NAME=${_ctrl_name}
+ZITI_CTRL_ADVERTISED_ADDRESS=${_ctrl_addr}
+ZITI_CTRL_ADVERTISED_PORT=${_ctrl_port}
+NSPAWN_EOF
+
     # Bootstrap joiner controller
     nspawn_exec "${_container}" /bin/bash -euxc "
-      export ZITI_BOOTSTRAP=true
-      export ZITI_BOOTSTRAP_PKI=true
-      export ZITI_BOOTSTRAP_CONFIG=true
-      export ZITI_BOOTSTRAP_DATABASE=true
-      export ZITI_BOOTSTRAP_CLUSTER=false
-      export ZITI_CLUSTER_NODE_PKI=/ctrl1-pki
-      export ZITI_CLUSTER_NODE_NAME=${_ctrl_name}
-      export ZITI_CTRL_ADVERTISED_ADDRESS=${_ctrl_addr}
-      export ZITI_CTRL_ADVERTISED_PORT=${_ctrl_port}
-      DEBUG=1 /opt/openziti/etc/controller/bootstrap.bash </dev/null
+      DEBUG=1 /opt/openziti/etc/controller/bootstrap.bash /ctrl-answers.env </dev/null
     "
 
     # Start controller (joiner bootstrap does NOT start it)
@@ -250,15 +281,20 @@ _expand_cluster() {
       -to "${TMPDIR}/${_rtr_name}.jwt"
     _jwt_content=$(<"${TMPDIR}/${_rtr_name}.jwt")
 
+    # Write answer file for router in container
+    local _nspawn_rtr_answers="${NSPAWN_DIR}/${_container}/rtr-answers.env"
+    sudo tee "${_nspawn_rtr_answers}" >/dev/null <<NSPAWN_EOF
+ZITI_BOOTSTRAP=true
+ZITI_BOOTSTRAP_ENROLLMENT=true
+ZITI_ENROLL_TOKEN='${_jwt_content}'
+ZITI_ROUTER_NAME=${_rtr_name}
+ZITI_ROUTER_ADVERTISED_ADDRESS=${_rtr_addr}
+ZITI_ROUTER_PORT=${_rtr_port}
+NSPAWN_EOF
+
     # Bootstrap router in container
     nspawn_exec "${_container}" /bin/bash -euxc "
-      export ZITI_BOOTSTRAP=true
-      export ZITI_BOOTSTRAP_ENROLLMENT=true
-      export ZITI_ENROLL_TOKEN='${_jwt_content}'
-      export ZITI_ROUTER_NAME=${_rtr_name}
-      export ZITI_ROUTER_ADVERTISED_ADDRESS=${_rtr_addr}
-      export ZITI_ROUTER_PORT=${_rtr_port}
-      DEBUG=1 /opt/openziti/etc/router/bootstrap.bash </dev/null
+      DEBUG=1 /opt/openziti/etc/router/bootstrap.bash /rtr-answers.env </dev/null
     "
 
     # Start router (bootstrap does NOT start it)

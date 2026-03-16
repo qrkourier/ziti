@@ -271,25 +271,6 @@ prompt() {
   fi
 }
 
-loadEnvStdin() {
-  # if not a tty (stdin is redirected), then slurp answers from stdin, e.g., env
-  # assignments like ZITI_THING=abcd1234, one per line
-  if [[ ! -t 0 ]]; then
-    while read -r line; do
-      if [[ "${line:-}" =~ ^ZITI_.*= ]]; then
-        eval "${line}"
-        setAnswer "${line}" "${SVC_ENV_FILE}" "${BOOT_ENV_FILE}"
-      # ignore lines beginning with # and lines containing only zero or more whitespace chars
-      elif [[ "${line:-}" =~ ^(#|\\s*?$) ]]; then
-        echo "DEBUG: ignoring '${line}'" >&3
-        continue
-      else
-        echo "WARN: ignoring '${line}'; not a ZITI_* env var assignment" >&2
-      fi
-    done
-  fi
-}
-
 # shellcheck disable=SC2120
 loadEnvFiles() {
   if (( $#))
@@ -312,13 +293,10 @@ loadEnvFiles() {
 
 promptCtrlAddress() {
   if [[ -z "${ZITI_CTRL_ADVERTISED_ADDRESS:-}" ]]; then
-    if [[ -n "${ZITI_CLUSTER_NODE_NAME:-}" && -n "${ZITI_CLUSTER_TRUST_DOMAIN:-}" ]]; then
-      ZITI_CTRL_ADVERTISED_ADDRESS="$(
-        prompt "Enter DNS name of the controller [${ZITI_CLUSTER_NODE_NAME}.${ZITI_CLUSTER_TRUST_DOMAIN}]: " \
-        || echo "${ZITI_CLUSTER_NODE_NAME}.${ZITI_CLUSTER_TRUST_DOMAIN}"
-      )"
-    else
-      ZITI_CTRL_ADVERTISED_ADDRESS="$(prompt "Enter DNS name of the controller [required]: ")"
+    if isInteractive; then
+      while [[ -z "${ZITI_CTRL_ADVERTISED_ADDRESS:-}" ]]; do
+        ZITI_CTRL_ADVERTISED_ADDRESS="$(prompt "Enter DNS name of the controller (required): ")" || true
+      done
     fi
     if [[ -z "${ZITI_CTRL_ADVERTISED_ADDRESS:-}" ]]; then
       echo "ERROR: ZITI_CTRL_ADVERTISED_ADDRESS is required" >&2
@@ -335,7 +313,10 @@ promptClusterNodePki(){
             "\n\t${ZITI_CA_FILE}/certs/${ZITI_CA_FILE}.cert"\
             "\n\t${ZITI_CA_FILE}/keys/${ZITI_CA_FILE}.key"\
             "\n"
-    if ZITI_CLUSTER_NODE_PKI="$(prompt "Enter the path to the existing cluster's PKI directory: " )"; then
+    if isInteractive; then
+      while [[ -z "${ZITI_CLUSTER_NODE_PKI:-}" ]]; do
+        ZITI_CLUSTER_NODE_PKI="$(prompt "Enter the path to the existing cluster's PKI directory (required): ")" || true
+      done
       setAnswer "ZITI_CLUSTER_NODE_PKI=${ZITI_CLUSTER_NODE_PKI}" "${BOOT_ENV_FILE}"
     else
       echo "ERROR: ZITI_CLUSTER_NODE_PKI is required for joining an existing cluster" >&2
@@ -347,11 +328,12 @@ promptClusterNodePki(){
 promptBootstrapCluster(){
   # Prompt if ZITI_BOOTSTRAP_CLUSTER is unset and database bootstrapping is enabled
   if [[ -z "${ZITI_BOOTSTRAP_CLUSTER:-}" && "${ZITI_BOOTSTRAP_DATABASE:-}" == true ]]; then
-    ZITI_BOOTSTRAP_CLUSTER="$(prompt 'Create a new cluster (NO if joining a cluster) [Y/n]: ' || echo 'true')"
-    if [[ "${ZITI_BOOTSTRAP_CLUSTER}" =~ ^([yY]([eE][sS])?|[tT]([rR][uU][eE])?)$ ]]; then
-      ZITI_BOOTSTRAP_CLUSTER=true
-    elif [[ "${ZITI_BOOTSTRAP_CLUSTER}" =~ ^([nN][oO]?|[fF]([aA][lL][sS][eE])?)$ ]]; then
+    local _joining
+    _joining="$(prompt 'Are you joining an existing cluster? [y/N]: ' || echo 'false')"
+    if [[ "${_joining}" =~ ^([yY]([eE][sS])?|[tT]([rR][uU][eE])?)$ ]]; then
       ZITI_BOOTSTRAP_CLUSTER=false
+    else
+      ZITI_BOOTSTRAP_CLUSTER=true
     fi
     setAnswer "ZITI_BOOTSTRAP_CLUSTER=${ZITI_BOOTSTRAP_CLUSTER}" "${BOOT_ENV_FILE}"
   fi
@@ -360,17 +342,20 @@ promptBootstrapCluster(){
 promptClusterNodeName(){
   # Prompt if ZITI_CLUSTER_NODE_NAME is unset and database bootstrapping is enabled
   if [[ -z "${ZITI_CLUSTER_NODE_NAME:-}" && "${ZITI_BOOTSTRAP_DATABASE:-}" == true ]]; then
-    # if the address contains at least two dots then use the first part as the default node name
+    # derive default from controller address: first label of FQDN (requires at least 2 dots)
+    local _default=""
     if [[ -n "${ZITI_CTRL_ADVERTISED_ADDRESS:-}" && "${ZITI_CTRL_ADVERTISED_ADDRESS}" =~ .+\..+\..+ ]]; then
+      _default="${ZITI_CTRL_ADVERTISED_ADDRESS%%.*}"
+    fi
+    if [[ -n "${_default}" ]]; then
       ZITI_CLUSTER_NODE_NAME="$(
-        prompt "Enter the unique name for this node in the cluster [${ZITI_CTRL_ADVERTISED_ADDRESS%%.*}]: " \
-        || echo "${ZITI_CTRL_ADVERTISED_ADDRESS%%.*}"
+        prompt "Enter the unique name for this node in the cluster [${_default}]: " \
+        || echo "${_default}"
       )"
-    else
-      if ! ZITI_CLUSTER_NODE_NAME="$(prompt "Enter the unique name for this node in the cluster [required]: ")"; then
-        echo "ERROR: ZITI_CLUSTER_NODE_NAME is required" >&2
-        return 1
-      fi
+    elif isInteractive; then
+      while [[ -z "${ZITI_CLUSTER_NODE_NAME:-}" ]]; do
+        ZITI_CLUSTER_NODE_NAME="$(prompt "Enter the unique name for this node in the cluster (required): ")" || true
+      done
     fi
     if [[ -n "${ZITI_CLUSTER_NODE_NAME:-}" ]]; then
       setAnswer "ZITI_CLUSTER_NODE_NAME=${ZITI_CLUSTER_NODE_NAME}" "${BOOT_ENV_FILE}"
@@ -385,14 +370,20 @@ promptClusterTrustDomain() {
   # Prompt if creating a new cluster and trust domain is unset
   if [[ "${ZITI_BOOTSTRAP_CLUSTER:-}" == true && -z "${ZITI_CLUSTER_TRUST_DOMAIN:-}" ]]; then
     local _prompt="Enter the trust domain shared by all nodes in the cluster"
-    # if the address contains at least two dots then use everything after the first dot as the default trust domain
+    # derive default from controller address: everything after the first label
+    local _default=""
     if [[ "${ZITI_CTRL_ADVERTISED_ADDRESS:-}" =~ .+\..+\..+ ]]; then
+      _default="${ZITI_CTRL_ADVERTISED_ADDRESS#*.}"
+    fi
+    if [[ -n "${_default}" ]]; then
       ZITI_CLUSTER_TRUST_DOMAIN="$(
-        prompt "${_prompt} [${ZITI_CTRL_ADVERTISED_ADDRESS#*.}]: " \
-        || echo "${ZITI_CTRL_ADVERTISED_ADDRESS#*.}"
+        prompt "${_prompt} [${_default}]: " \
+        || echo "${_default}"
       )"
-    else
-      ZITI_CLUSTER_TRUST_DOMAIN="$(prompt "${_prompt} [required]: ")" || true
+    elif isInteractive; then
+      while [[ -z "${ZITI_CLUSTER_TRUST_DOMAIN:-}" ]]; do
+        ZITI_CLUSTER_TRUST_DOMAIN="$(prompt "${_prompt} (required): ")" || true
+      done
     fi
     if [[ -z "${ZITI_CLUSTER_TRUST_DOMAIN:-}" ]]; then
       echo "ERROR: ZITI_CLUSTER_TRUST_DOMAIN is required" >&2
@@ -478,15 +469,56 @@ promptPassword() {
   fi
   # prompt for password if database bootstrapping enabled and password not already set
   if [[ "${ZITI_BOOTSTRAP_DATABASE:-}" == true && -z "${ZITI_PWD:-}" ]]; then
-    GEN_PWD=$(head -c128 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^*_+~' | cut -c 1-22)
-    # don't set a generated password if not interactive because it will be unknown
-    if isInteractive && ZITI_PWD="$(prompt "Set password for '${ZITI_USER:-admin}' [${GEN_PWD}]: " || echo "${GEN_PWD}")"; then
-      # password is used only during bootstrap — not persisted to any env file
+    if isInteractive; then
+      local _gen_answer
+      _gen_answer="$(prompt "Generate a random password for '${ZITI_USER:-admin}'? [Y/n]: " || echo "y")"
+      if [[ "${_gen_answer}" =~ ^([nN][oO]?)$ ]]; then
+        # manual entry — re-prompt until non-empty
+        while [[ -z "${ZITI_PWD:-}" ]]; do
+          ZITI_PWD="$(prompt "Enter password for '${ZITI_USER:-admin}' (required): ")" || true
+        done
+      else
+        ZITI_PWD=$(head -c128 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^*_+~' | cut -c 1-22)
+        echo "Password: ${ZITI_PWD}"
+        echo "NOTE: this password is not saved anywhere — record it now."
+      fi
       setAnswer "ZITI_PWD=${ZITI_PWD}" "${BOOT_ENV_FILE}"
     else
       echo "ERROR: ZITI_PWD is required" >&2
       return 1
     fi
+  fi
+}
+
+promptConsole() {
+  # Detect whether the openziti-console package is installed
+  local _console_installed=false
+  if [[ -s "${ZITI_CONSOLE_LOCATION:-/opt/openziti/share/console}/index.html" ]]; then
+    _console_installed=true
+  fi
+
+  if [[ "${_console_installed}" == true ]]; then
+    # Console package is installed — configure binding silently
+    ZITI_BOOTSTRAP_CONSOLE=true
+    setAnswer "ZITI_BOOTSTRAP_CONSOLE=true" "${BOOT_ENV_FILE}"
+  elif [[ -z "${ZITI_BOOTSTRAP_CONSOLE:-}" ]]; then
+    if isInteractive; then
+      local _console_answer
+      _console_answer="$(prompt "Configure the OpenZiti Console (web UI)? [Y/n]: " || echo "y")"
+      if [[ "${_console_answer}" =~ ^([nN][oO]?)$ ]]; then
+        ZITI_BOOTSTRAP_CONSOLE=false
+      else
+        ZITI_BOOTSTRAP_CONSOLE=true
+        _SKIP_AUTOSTART=true
+        echo "WARNING: You must install the 'openziti-console' package before starting the controller:" >&2
+        echo "  sudo apt install openziti-console   # Debian/Ubuntu" >&2
+        echo "  sudo dnf install openziti-console   # RHEL/AlmaLinux" >&2
+      fi
+    else
+      # Non-interactive without console package: don't configure ZAC
+      ZITI_BOOTSTRAP_CONSOLE="${ZITI_BOOTSTRAP_CONSOLE:-false}"
+    fi
+    setAnswer "ZITI_BOOTSTRAP_CONSOLE=${ZITI_BOOTSTRAP_CONSOLE}" "${BOOT_ENV_FILE}"
   fi
 }
 
@@ -728,8 +760,7 @@ hintLinuxBootstrap() {
   local _work_dir="${1:-${PWD}}"
 
   echo -e "\nProvide a configuration in '${_work_dir}' or generate with:"\
-          "\n* Set ZITI_* environment vars (or pipe them to stdin)"\
-          "\n* Run '/opt/openziti/etc/controller/bootstrap.bash'"\
+          "\n  /opt/openziti/etc/controller/bootstrap.bash [/path/to/answers.env]"\
           "\n"
 }
 
@@ -832,13 +863,22 @@ UNIT
   echo "INFO: issuing initial leaf certificates"
   systemctl start ziti-controller-cert-renewal.service
 
-  # Enable the timer only if auto-renewal is on.  The units are always
-  # installed so an admin can enable the timer later without re-bootstrapping.
-  if [[ "${ZITI_AUTO_RENEW_CERTS:-true}" == true ]]; then
+  # Enable the timer if auto-renewal is requested (interactive prompt or env var).
+  # The units are always installed so an admin can enable the timer later.
+  local _enable_timer="${ZITI_AUTO_RENEW_CERTS:-true}"
+  if isInteractive && [[ "${_enable_timer}" == true ]]; then
+    local _timer_answer
+    _timer_answer="$(prompt "Enable automatic certificate renewal timer? [Y/n]: " || echo "y")"
+    if [[ "${_timer_answer}" =~ ^([nN][oO]?)$ ]]; then
+      _enable_timer=false
+    fi
+  fi
+  if [[ "${_enable_timer}" == true ]]; then
     systemctl enable --now ziti-controller-cert-renewal.timer
     echo "INFO: cert renewal timer enabled (monthly, leaf certs valid 365 days)"
   else
-    echo "INFO: cert renewal timer installed but not enabled (ZITI_AUTO_RENEW_CERTS=${ZITI_AUTO_RENEW_CERTS:-})"
+    echo "INFO: cert renewal timer installed but not enabled"
+    echo "  Enable later: systemctl enable --now ziti-controller-cert-renewal.timer"
   fi
 }
 
@@ -858,7 +898,8 @@ exitHandler() {
     echo "WARN: see output in '${BOOTSTRAP_LOG_FILE}'" >&2
   fi
   if [[ -s "${BOOT_ENV_FILE:-}" ]]; then
-    echo "INFO: bootstrap answers preserved in '${BOOT_ENV_FILE}' for debugging" >&2
+    echo "INFO: bootstrap answers preserved in '${BOOT_ENV_FILE}'" >&2
+    echo "  Re-run: /opt/openziti/etc/controller/bootstrap.bash ${BOOT_ENV_FILE}" >&2
   fi
 }
 
@@ -898,6 +939,10 @@ else
   set -o nounset
   set -o pipefail
 
+  # Restore default SIGINT disposition — dpkg may have set SIG_IGN which
+  # would prevent the user from Ctrl-C'ing out of interactive prompts.
+  trap - SIGINT
+
   # Debug output and exit handler — only needed for direct execution.
   # When sourced (e.g., by entrypoint.bash), the caller manages its own
   # fd 3 and traps.
@@ -909,17 +954,18 @@ else
   else
     exec 3>>"${DEBUG_LOG_FILE:=$(mktemp)}"
   fi
-  trap exitHandler EXIT SIGINT SIGTERM
+  trap exitHandler EXIT
 
   export ZITI_HOME=/var/lib/ziti-controller
   SVC_ENV_FILE=/opt/openziti/etc/controller/service.env
   SVC_FILE=/etc/systemd/system/ziti-controller.service.d/override.conf
   : "${ZITI_CONSOLE_LOCATION:=/opt/openziti/share/console}"
 
+  ANSWER_FILE=""
   if [[ "${1:-}" =~ ^[-] ]]
   then
     echo -e "\nUsage:"\
-            "\n\t$0 [CONFIG_FILE]"\
+            "\n\t$0 [ANSWER_FILE]"\
             "\n" \
             "\nOPTIONS" \
             "\n" \
@@ -928,12 +974,11 @@ else
             "\n" >&2
     hintLinuxBootstrap "${ZITI_HOME}"
     exit 1
-  elif (( $# ))
-  then
-    set -- "${ZITI_HOME}/$(basename "$1")"
-  else
-    set -- "${ZITI_HOME}/config.yml"
+  elif (( $# )); then
+    ANSWER_FILE="$1"
   fi
+  # config file is always the standard location
+  set -- "${ZITI_HOME}/config.yml"
   echo "DEBUG: using config file: $*" >&3
 
   if [[ $UID != 0 ]]; then
@@ -950,17 +995,22 @@ else
   # Feature flags stay in service.env (the package conffile).
   # On failure the temp file survives for debugging.
   BOOT_ENV_FILE="$(mktemp)"
-  loadEnvStdin                  # slurp ZITI_*=value lines from stdin if not a tty
+  if [[ -n "${ANSWER_FILE}" && -f "${ANSWER_FILE}" ]]; then
+    echo "DEBUG: loading answers from ${ANSWER_FILE}" >&3
+    loadEnvFiles "${ANSWER_FILE}"
+  fi
   importZitiVars                # get ZITI_* vars from environment and set in BOOT_ENV_FILE
   promptBootstrap               # prompt for ZITI_BOOTSTRAP if explicitly disabled (set and != true)
   promptBootstrapCluster        # prompt for new cluster or existing PKI
-  promptClusterNodeName         # prompt for ZITI_CLUSTER_NODE_NAME if not already set
-  promptClusterTrustDomain      # prompt for ZITI_CLUSTER_TRUST_DOMAIN if not already set
-  promptClusterNodePki          # prompt for ZITI_CLUSTER_NODE_PKI if not already set and not bootstrapping a new cluster
   promptCtrlAddress             # prompt for ZITI_CTRL_ADVERTISED_ADDRESS if not already set
+  promptClusterNodeName         # prompt for ZITI_CLUSTER_NODE_NAME (default derived from address)
+  promptClusterTrustDomain      # prompt for ZITI_CLUSTER_TRUST_DOMAIN (default derived from address)
+  promptClusterNodePki          # prompt for ZITI_CLUSTER_NODE_PKI if joining existing cluster
   promptCtrlPort                # prompt for ZITI_CTRL_ADVERTISED_PORT if not already set
   promptUser                    # prompt for ZITI_USER if not already set and database bootstrapping enabled
   promptPassword                # prompt for ZITI_PWD if not already set and database bootstrapping enabled
+  _SKIP_AUTOSTART=false
+  promptConsole                 # prompt for ZAC console binding configuration
 
   # suppress normal output during bootstrapping unless VERBOSE
   exec 4>&1; exec 1>>"${INFO_LOG_FILE:=$(mktemp)}"
@@ -986,8 +1036,8 @@ else
 
     # Initialize cluster with default admin if bootstrapping a new cluster
     if [[ "${ZITI_BOOTSTRAP_CLUSTER:-}" == true || "${ZITI_BOOTSTRAP_DATABASE:-}" == true ]]; then
-      # Check if systemd is available (PID 1 is systemd)
-      if [[ -d /run/systemd/system ]]; then
+      # Check if systemd is available (PID 1 is systemd) and auto-start is not skipped
+      if [[ -d /run/systemd/system ]] && [[ "${_SKIP_AUTOSTART}" != true ]]; then
         echo "DEBUG: starting controller service for cluster initialization" >&3
         systemctl start ziti-controller.service
 
@@ -1016,14 +1066,17 @@ else
     trap - EXIT  # remove exit trap
 
     # On Linux with systemd, enable and start the service if not already running
-    if [[ -d /run/systemd/system ]]; then
+    if [[ -d /run/systemd/system ]] && [[ "${_SKIP_AUTOSTART}" != true ]]; then
       if ! systemctl is-enabled --quiet ziti-controller.service 2>/dev/null; then
         systemctl enable ziti-controller.service
       fi
       if ! systemctl is-active --quiet ziti-controller.service 2>/dev/null; then
         systemctl start ziti-controller.service
       fi
-      systemctl status --no-pager ziti-controller.service >&2 || true
+      echo "Run 'systemctl status ziti-controller' to verify." >&2
+    elif [[ "${_SKIP_AUTOSTART}" == true ]]; then
+      echo "INFO: auto-start skipped — install openziti-console, then run:" >&2
+      echo "  systemctl enable --now ziti-controller.service" >&2
     fi
   else
     echo "ERROR: something went wrong during bootstrapping" >&2

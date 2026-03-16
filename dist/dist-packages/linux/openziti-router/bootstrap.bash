@@ -169,25 +169,6 @@ prompt() {
   fi
 }
 
-loadEnvStdin() {
-  # if not a tty (stdin is redirected), then slurp answers from stdin, e.g., env
-  # assignments like ZITI_ENROLL_TOKEN=abcd1234, one per line
-  if [[ ! -t 0 ]]; then
-    while read -r line; do
-      if [[ "${line:-}" =~ ^ZITI_.*= ]]; then
-        eval "${line}"
-        setAnswer "${line}" "${SVC_ENV_FILE}" "${BOOT_ENV_FILE}"
-      # ignore lines beginning with # and lines containing only zero or more whitespace chars
-      elif [[ "${line:-}" =~ ^(#|\\s*?$) ]]; then
-        echo "DEBUG: ignoring '${line}'" >&3
-        continue
-      else
-        echo "WARN: ignoring '${line}'; not a ZITI_* env var assignment" >&2
-      fi
-    done
-  fi
-}
-
 # shellcheck disable=SC2120
 loadEnvFiles() {
   if (( $# ))
@@ -209,13 +190,16 @@ loadEnvFiles() {
 }
 
 promptRouterAddress() {
-    if isInteractive; then
-        if ZITI_ROUTER_ADVERTISED_ADDRESS="$(prompt "Enter the DNS name or IP address of this router [${ZITI_ROUTER_ADVERTISED_ADDRESS}]: " || echo "${ZITI_ROUTER_ADVERTISED_ADDRESS}")"; then
-            setAnswer "ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}" "${BOOT_ENV_FILE}"
+    if [[ -z "${ZITI_ROUTER_ADVERTISED_ADDRESS:-}" ]]; then
+        if isInteractive; then
+            while [[ -z "${ZITI_ROUTER_ADVERTISED_ADDRESS:-}" ]]; do
+                ZITI_ROUTER_ADVERTISED_ADDRESS="$(prompt "Permanent external address of this router (required): ")" || true
+            done
+        else
+            echo "ERROR: ZITI_ROUTER_ADVERTISED_ADDRESS is required" >&2
+            return 1
         fi
-    fi
-    if [[ "${ZITI_ROUTER_ADVERTISED_ADDRESS}" == localhost ]]; then
-        echo "WARN: ZITI_ROUTER_ADVERTISED_ADDRESS='localhost'; the router will only be reachable from this host" >&2
+        setAnswer "ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}" "${BOOT_ENV_FILE}"
     fi
 }
 
@@ -231,13 +215,14 @@ promptEnrollToken() {
         elif [[ -n "${ZITI_ENROLL_TOKEN:-}" ]]; then
             echo "DEBUG: ZITI_ENROLL_TOKEN is defined" >&3
         else
-            if ZITI_ENROLL_TOKEN=$(prompt "Router enrollment token as string or path [required]: "); then
-                if [[ -n "${ZITI_ENROLL_TOKEN:-}" ]]; then
-                    setAnswer "ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}" "${BOOT_ENV_FILE}"
-                else
-                    echo "ERROR: ZITI_ENROLL_TOKEN is required to bootstrap the router" >&2
-                    return 1
-                fi
+            if isInteractive; then
+                while [[ -z "${ZITI_ENROLL_TOKEN:-}" ]]; do
+                    ZITI_ENROLL_TOKEN=$(prompt "Router enrollment token as string or path (required): ") || true
+                done
+                setAnswer "ZITI_ENROLL_TOKEN=${ZITI_ENROLL_TOKEN}" "${BOOT_ENV_FILE}"
+            else
+                echo "ERROR: ZITI_ENROLL_TOKEN is required to bootstrap the router" >&2
+                return 1
             fi
         fi
     fi
@@ -395,8 +380,7 @@ hintLinuxBootstrap() {
   local _work_dir="${1:-${PWD}}"
 
   echo -e "\nProvide a configuration in '${_work_dir}' or generate with:"\
-          "\n* Set ZITI_* environment vars (or pipe them to stdin)"\
-          "\n* Run '/opt/openziti/etc/router/bootstrap.bash'"\
+          "\n  /opt/openziti/etc/router/bootstrap.bash [/path/to/answers.env]"\
           "\n"
 }
 
@@ -418,7 +402,8 @@ exitHandler() {
     echo "WARN: see output in '${_log_file}'" >&2
   fi
   if [[ -s "${BOOT_ENV_FILE:-}" ]]; then
-    echo "INFO: bootstrap answers preserved in '${BOOT_ENV_FILE}' for debugging" >&2
+    echo "INFO: bootstrap answers preserved in '${BOOT_ENV_FILE}'" >&2
+    echo "  Re-run: /opt/openziti/etc/router/bootstrap.bash ${BOOT_ENV_FILE}" >&2
   fi
 }
 
@@ -426,9 +411,8 @@ exitHandler() {
 
 # set defaults
 : "${ZITI_CTRL_ADVERTISED_PORT:=1280}"
-# Docker entrypoint (source path) keeps localhost; Linux (execute path)
-# overrides with hostname before prompts — see below the source/execute guard.
-: "${ZITI_ROUTER_ADVERTISED_ADDRESS:=localhost}"
+# ZITI_ROUTER_ADVERTISED_ADDRESS has no default — Docker sets it via compose
+# env; Linux prompts for it if unset (see promptRouterAddress).
 : "${ZITI_ROUTER_PORT:=3022}"
 : "${ZITI_ROUTER_BIND_ADDRESS:=0.0.0.0}"  # the interface address on which to listen
 : "${ZITI_ROUTER_NAME:=router}"  # basename of identity files
@@ -454,6 +438,10 @@ else
   set -o nounset
   set -o pipefail
 
+  # Restore default SIGINT disposition — dpkg may have set SIG_IGN which
+  # would prevent the user from Ctrl-C'ing out of interactive prompts.
+  trap - SIGINT
+
   # Debug output and exit handler — only needed for direct execution.
   # When sourced (e.g., by entrypoint.bash), the caller manages its own
   # fd 3 and traps.
@@ -465,16 +453,17 @@ else
   else
     exec 3>>"${DEBUG_LOG_FILE:=$(mktemp)}"
   fi
-  trap exitHandler EXIT SIGINT SIGTERM
+  trap exitHandler EXIT
 
   export ZITI_HOME=/var/lib/ziti-router
   SVC_ENV_FILE=/opt/openziti/etc/router/service.env
   SVC_FILE=/etc/systemd/system/ziti-router.service.d/override.conf
 
+  ANSWER_FILE=""
   if [[ "${1:-}" =~ ^[-] ]]
   then
     echo -e "\nUsage:"\
-            "\n\t$0 [CONFIG_FILE]"\
+            "\n\t$0 [ANSWER_FILE]"\
             "\n" \
             "\nOPTIONS" \
             "\n" \
@@ -483,12 +472,11 @@ else
             "\n" >&2
     hintLinuxBootstrap "${ZITI_HOME}"
     exit 1
-  elif (( $# ))
-  then
-    set -- "${ZITI_HOME}/$(basename "$1")"
-  else
-    set -- "${ZITI_HOME}/config.yml"
+  elif (( $# )); then
+    ANSWER_FILE="$1"
   fi
+  # config file is always the standard location
+  set -- "${ZITI_HOME}/config.yml"
   echo "DEBUG: using config file: $*" >&3
 
   if [[ $UID != 0 ]]; then
@@ -505,15 +493,11 @@ else
   # Feature flags stay in service.env (the package conffile).
   # On failure the temp file survives for debugging.
   BOOT_ENV_FILE="$(mktemp)"
-  loadEnvStdin                  # slurp ZITI_*=value lines from stdin if not a tty
-  importZitiVars                # get ZITI_* vars from environment and set in BOOT_ENV_FILE
-
-  # On Linux the pre-guard default is 'localhost' (useful for Docker where
-  # the container hostname is a random ID).  If nobody overrode it, use the
-  # system hostname instead — much more likely to be reachable.
-  if [[ "${ZITI_ROUTER_ADVERTISED_ADDRESS}" == localhost ]]; then
-    ZITI_ROUTER_ADVERTISED_ADDRESS="$(hostname -f 2>/dev/null || hostname)"
+  if [[ -n "${ANSWER_FILE}" && -f "${ANSWER_FILE}" ]]; then
+    echo "DEBUG: loading answers from ${ANSWER_FILE}" >&3
+    loadEnvFiles "${ANSWER_FILE}"
   fi
+  importZitiVars                # get ZITI_* vars from environment and set in BOOT_ENV_FILE
 
   promptBootstrap               # prompt for ZITI_BOOTSTRAP if explicitly disabled (set and != true)
   promptRouterAddress           # prompt for ZITI_ROUTER_ADVERTISED_ADDRESS if not already set
@@ -550,7 +534,7 @@ else
       if ! systemctl is-active --quiet ziti-router.service 2>/dev/null; then
         systemctl start ziti-router.service
       fi
-      systemctl status --no-pager ziti-router.service >&2 || true
+      echo "Run 'systemctl status ziti-router' to verify." >&2
     fi
   else
     echo "ERROR: something went wrong during bootstrapping; set DEBUG=1" >&2

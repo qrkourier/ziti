@@ -232,7 +232,16 @@ if [[ -t 0 ]] && [[ ! -f "${STATE_DIR}/config.yml" ]]; then
       echo "Run /opt/openziti/etc/controller/bootstrap.bash when ready."
       ;;
     *)
-      exec /opt/openziti/etc/controller/bootstrap.bash
+      # Run as child process (not exec) so we can catch SIGINT/failure and
+      # still exit 0 to dpkg — the package is installed regardless.
+      set +o errexit
+      /opt/openziti/etc/controller/bootstrap.bash
+      _rc=$?
+      set -o errexit
+      if (( _rc != 0 )); then
+        echo "Bootstrap exited with code ${_rc}."
+        echo "Re-run: /opt/openziti/etc/controller/bootstrap.bash"
+      fi
       ;;
   esac
 fi
