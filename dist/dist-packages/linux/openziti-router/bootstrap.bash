@@ -238,7 +238,7 @@ grantNetAdmin() {
 }
 
 promptRouterPort() {
-    if isInteractive; then
+    if [[ "${_ZITI_ROUTER_PORT_PROVIDED}" != true ]] && isInteractive; then
         local _port_answer
         _port_answer="$(prompt "Enter the router port [${ZITI_ROUTER_PORT}]: " || true)"
         if [[ -n "${_port_answer}" ]]; then
@@ -312,12 +312,14 @@ promptCtrlPort() {
     return 0
   fi
 
-  # if undefined or default value in env file, prompt for controller port, preserving default if no answer
-  if [[ -z "${ZITI_CTRL_ADVERTISED_PORT:-}" ]]; then
-    if ZITI_CTRL_ADVERTISED_PORT="$(prompt 'Enter the controller port [1280]: ' || echo '1280')"; then
-      setAnswer "ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}" "${BOOT_ENV_FILE}"
+  if [[ "${_ZITI_CTRL_PORT_PROVIDED}" != true ]] && isInteractive; then
+    local _port_answer
+    _port_answer="$(prompt "Enter the controller port [${ZITI_CTRL_ADVERTISED_PORT}]: " || true)"
+    if [[ -n "${_port_answer}" ]]; then
+      ZITI_CTRL_ADVERTISED_PORT="${_port_answer}"
     fi
   fi
+  setAnswer "ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}" "${BOOT_ENV_FILE}"
   if [[ "${ZITI_CTRL_ADVERTISED_PORT}" -lt 1024 ]]; then
     grantNetBindService
   fi
@@ -411,10 +413,12 @@ exitHandler() {
 
 # BEGIN
 
-# set defaults
+# set defaults — record whether values were explicitly provided before applying defaults
+[[ -n "${ZITI_CTRL_ADVERTISED_PORT:-}" ]] && _ZITI_CTRL_PORT_PROVIDED=true || _ZITI_CTRL_PORT_PROVIDED=false
 : "${ZITI_CTRL_ADVERTISED_PORT:=1280}"
 # ZITI_ROUTER_ADVERTISED_ADDRESS has no default — Docker sets it via compose
 # env; Linux prompts for it if unset (see promptRouterAddress).
+[[ -n "${ZITI_ROUTER_PORT:-}" ]] && _ZITI_ROUTER_PORT_PROVIDED=true || _ZITI_ROUTER_PORT_PROVIDED=false
 : "${ZITI_ROUTER_PORT:=3022}"
 : "${ZITI_ROUTER_BIND_ADDRESS:=0.0.0.0}"  # the interface address on which to listen
 : "${ZITI_ROUTER_NAME:=router}"  # basename of identity files
@@ -499,7 +503,7 @@ else
 
   promptBootstrap               # prompt for ZITI_BOOTSTRAP if explicitly disabled (set and != true)
   promptRouterAddress           # prompt for ZITI_ROUTER_ADVERTISED_ADDRESS if not already set
-  promptRouterPort              # prompt for ZITI_ROUTER_PORT if not already set
+  promptRouterPort              # prompt for ZITI_ROUTER_PORT if not already answered
   promptEnrollToken             # prompt for ZITI_ENROLL_TOKEN if not already set
 
   # suppress normal output during bootstrapping unless VERBOSE
