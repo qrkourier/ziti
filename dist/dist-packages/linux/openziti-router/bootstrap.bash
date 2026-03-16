@@ -238,12 +238,14 @@ grantNetAdmin() {
 }
 
 promptRouterPort() {
-    # if undefined or default value in env file, prompt for router port, preserving default if no answer
-    if [[ -z "${ZITI_ROUTER_PORT:-}" ]]; then
-        if ZITI_ROUTER_PORT="$(prompt 'Enter the router port [3022]: ' || echo '3022')"; then
-            setAnswer "ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}" "${BOOT_ENV_FILE}"
+    if isInteractive; then
+        local _port_answer
+        _port_answer="$(prompt "Enter the router port [${ZITI_ROUTER_PORT}]: " || true)"
+        if [[ -n "${_port_answer}" ]]; then
+            ZITI_ROUTER_PORT="${_port_answer}"
         fi
     fi
+    setAnswer "ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}" "${BOOT_ENV_FILE}"
     if [[ "${ZITI_ROUTER_PORT}" -lt 1024 ]]; then
         grantNetBindService
     fi
