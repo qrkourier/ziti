@@ -163,20 +163,26 @@ jobs:
           set -o pipefail
           set -o xtrace
 
-          /opt/openziti/etc/controller/bootstrap.bash <<CTRL
+          CTRL_ANSWERS="$(mktemp)"
+          cat > "${CTRL_ANSWERS}" <<EOF
           ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_ADVERTISED_ADDRESS}
           ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT}
           ZITI_USER=admin
           ZITI_PWD=${ZITI_PWD}
           ZITI_ARGS="--verbose"
-          CTRL
+          EOF
 
-          /opt/openziti/etc/router/bootstrap.bash <<ROUTER
+          /opt/openziti/etc/controller/bootstrap.bash "${CTRL_ANSWERS}" </dev/null
+
+          RTR_ANSWERS="$(mktemp)"
+          cat > "${RTR_ANSWERS}" <<EOF
           ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS}
           ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT}
           ZITI_BOOTSTRAP_ENROLLMENT=false
           ZITI_ARGS="--verbose"
-          ROUTER
+          EOF
+
+          /opt/openziti/etc/router/bootstrap.bash "${RTR_ANSWERS}" </dev/null
 
   linux-install-test:
     name: Test Linux Fresh Install
