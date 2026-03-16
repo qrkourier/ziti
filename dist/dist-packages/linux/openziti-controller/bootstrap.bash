@@ -923,10 +923,6 @@ else
   set -o nounset
   set -o pipefail
 
-  # Restore default SIGINT disposition — dpkg may have set SIG_IGN which
-  # would prevent the user from Ctrl-C'ing out of interactive prompts.
-  trap - SIGINT
-
   # Debug output and exit handler — only needed for direct execution.
   # When sourced (e.g., by entrypoint.bash), the caller manages its own
   # fd 3 and traps.
