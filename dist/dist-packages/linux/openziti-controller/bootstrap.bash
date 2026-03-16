@@ -491,35 +491,21 @@ promptPassword() {
 }
 
 promptConsole() {
-  # Detect whether the openziti-console package is installed
-  local _console_installed=false
-  if [[ -s "${ZITI_CONSOLE_LOCATION:-/opt/openziti/share/console}/index.html" ]]; then
-    _console_installed=true
-  fi
-
-  if [[ "${_console_installed}" == true ]]; then
-    # Console package is installed — configure binding silently
-    ZITI_BOOTSTRAP_CONSOLE=true
-    setAnswer "ZITI_BOOTSTRAP_CONSOLE=true" "${BOOT_ENV_FILE}"
-  elif [[ -z "${ZITI_BOOTSTRAP_CONSOLE:-}" ]]; then
-    if isInteractive; then
-      local _console_answer
-      _console_answer="$(prompt "Configure the OpenZiti Console (web UI)? [Y/n]: " || echo "y")"
-      if [[ "${_console_answer}" =~ ^([nN][oO]?)$ ]]; then
-        ZITI_BOOTSTRAP_CONSOLE=false
-      else
-        ZITI_BOOTSTRAP_CONSOLE=true
-        _SKIP_AUTOSTART=true
-        echo "WARNING: You must install the 'openziti-console' package before starting the controller:" >&2
-        echo "  sudo apt install openziti-console   # Debian/Ubuntu" >&2
-        echo "  sudo dnf install openziti-console   # RHEL/AlmaLinux" >&2
-      fi
+  if isInteractive; then
+    local _console_answer
+    _console_answer="$(prompt "Configure the OpenZiti Console (web UI)? [Y/n]: " || echo "y")"
+    if [[ "${_console_answer}" =~ ^([nN][oO]?)$ ]]; then
+      ZITI_BOOTSTRAP_CONSOLE=false
     else
-      # Non-interactive without console package: don't configure ZAC
-      ZITI_BOOTSTRAP_CONSOLE="${ZITI_BOOTSTRAP_CONSOLE:-false}"
+      ZITI_BOOTSTRAP_CONSOLE=true
+      if ! [[ -s "${ZITI_CONSOLE_LOCATION:-/opt/openziti/share/console}/index.html" ]]; then
+        echo "WARN: install 'openziti-console' package to provide console assets" >&2
+      fi
     fi
-    setAnswer "ZITI_BOOTSTRAP_CONSOLE=${ZITI_BOOTSTRAP_CONSOLE}" "${BOOT_ENV_FILE}"
   fi
+  # Non-interactive: honor env var / answer file / service.env default
+  : "${ZITI_BOOTSTRAP_CONSOLE:=true}"
+  setAnswer "ZITI_BOOTSTRAP_CONSOLE=${ZITI_BOOTSTRAP_CONSOLE}" "${BOOT_ENV_FILE}"
 }
 
 grantNetBindService() {
@@ -573,9 +559,7 @@ bootstrap() {
         # Linux: the systemd timer handles both initial issuance and renewal.
         # installCertRenewalTimer() (called later) runs the oneshot immediately.
         if isInteractive; then
-          echo -e "\nNOTE: Leaf certificates (client and server) are renewed automatically." \
-                  "\nOn Linux: the ziti-controller-cert-renewal.timer runs monthly." \
-                  "\nTo disable: systemctl disable ziti-controller-cert-renewal.timer\n"
+          echo "NOTE: leaf certs are renewed monthly by ziti-controller-cert-renewal.timer" >&2
         fi
       else
         # Docker: no systemd, issue leaf certs directly
@@ -1009,7 +993,6 @@ else
   promptCtrlPort                # prompt for ZITI_CTRL_ADVERTISED_PORT if not already set
   promptUser                    # prompt for ZITI_USER if not already set and database bootstrapping enabled
   promptPassword                # prompt for ZITI_PWD if not already set and database bootstrapping enabled
-  _SKIP_AUTOSTART=false
   promptConsole                 # prompt for ZAC console binding configuration
 
   # suppress normal output during bootstrapping unless VERBOSE
@@ -1037,7 +1020,7 @@ else
     # Initialize cluster with default admin if bootstrapping a new cluster
     if [[ "${ZITI_BOOTSTRAP_CLUSTER:-}" == true || "${ZITI_BOOTSTRAP_DATABASE:-}" == true ]]; then
       # Check if systemd is available (PID 1 is systemd) and auto-start is not skipped
-      if [[ -d /run/systemd/system ]] && [[ "${_SKIP_AUTOSTART}" != true ]]; then
+      if [[ -d /run/systemd/system ]]; then
         echo "DEBUG: starting controller service for cluster initialization" >&3
         systemctl start ziti-controller.service
 
@@ -1066,7 +1049,7 @@ else
     trap - EXIT  # remove exit trap
 
     # On Linux with systemd, enable and start the service if not already running
-    if [[ -d /run/systemd/system ]] && [[ "${_SKIP_AUTOSTART}" != true ]]; then
+    if [[ -d /run/systemd/system ]]; then
       if ! systemctl is-enabled --quiet ziti-controller.service 2>/dev/null; then
         systemctl enable ziti-controller.service
       fi
@@ -1074,9 +1057,6 @@ else
         systemctl start ziti-controller.service
       fi
       echo "Run 'systemctl status ziti-controller' to verify." >&2
-    elif [[ "${_SKIP_AUTOSTART}" == true ]]; then
-      echo "INFO: auto-start skipped — install openziti-console, then run:" >&2
-      echo "  systemctl enable --now ziti-controller.service" >&2
     fi
   else
     echo "ERROR: something went wrong during bootstrapping" >&2
